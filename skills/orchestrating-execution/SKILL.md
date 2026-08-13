@@ -331,13 +331,16 @@ or a `blockedByBundles` entry that does not name an earlier bundle. Every one of
 malformed-input bug on your side, not a plan problem — fix the `args` and relaunch.
 
 The script announces its phases (Implement → Review → Fixes → Test → Refactor → Test) and returns
-`{epicId, mode, bundles, findings, greenAfterImpl, greenAfterRefactor, notes}`.
+`{epicId, mode, bundles, findings, greenAfterImpl, greenAfterRefactor, lastTestSummary, notes}`.
+`lastTestSummary` is the final test agent's `summary` string when the last test loop ended red, and
+`null` when it ended green — report it verbatim rather than digging the failure out of the run log.
 
 ### 6f. Untracked mode — degraded, not equivalent
 
 **Beads is strongly preferred.** Untracked mode is a fallback with real, unavoidable weaknesses:
 `orchestrate.js` hardcodes `bd show <id>` into every implementer prompt, and `ctx` is *prepended*
-(`orchestrate.js:133`), so your "there is no tracker" clause sits in the weaker position — earlier
+by the `dispatch` helper's prompt assembly in `orchestrate.js` (it sends `` `${ctx}\n\n${prompt}` ``
+to every agent), so your "there is no tracker" clause sits in the weaker position — earlier
 and more general — against a later, more specific instruction. Agents will sometimes try `bd show`
 anyway. There is also no durable record of what completed, and `/complete-epic` is unavailable
 afterwards. If your human partner is wavering, say all of that and recommend `bd init`.

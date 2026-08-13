@@ -37,7 +37,7 @@ makes it impossible to tell an implementation bug from a refactor bug.
 
 ### Why the script enforces model routing, not a hook
 
-The [Subagent Model Routing](#subagent-model-routing--optional-flow) hooks above do not fire here:
+The [Subagent Model Routing](#subagent-model-routing--optional-flow) hooks below do not fire here:
 `PreToolUse:Agent` does not trigger for a Workflow tool's internal `agent()` spawns. So
 `orchestrate.js` resolves every dispatch's tier to a model itself, refuses to start if any bundle
 is missing a tier, and logs the tier and resolved model on every dispatch as the audit trail the
@@ -59,7 +59,7 @@ lists a task before the one that blocks it.
 ### Model tiers
 
 Tasks in `writing-plans` carry a `modelTier` of `mechanical`, `standard`, or `frontier` (see
-[The tiers](#the-tiers) above). `orchestrate.js` itself never sees or names a concrete model — it's
+[The tiers](#the-tiers) below). `orchestrate.js` itself never sees or names a concrete model — it's
 a Workflow-tool script with no filesystem access, so it only ever evaluates a tier against a
 `routing` object it's handed in `args`. The `orchestrating-execution` skill is what reads
 `docs/superpowers/model-routing.json` (project path first, falling back to

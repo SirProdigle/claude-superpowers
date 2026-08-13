@@ -221,7 +221,27 @@ while (remaining.size) {
     .filter((b) => b.blockedByBundles.every((d) => !remaining.has(d)))
     .sort((a, b) => a.id.localeCompare(b.id));
   if (!ready.length) {
-    console.error(`bundle-plan: dependency cycle among bundles ${[...remaining.keys()].join(", ")}`);
+    // Naming only the bundle ids ("cycle among bundles b1, b2") is useless:
+    // bundle ids are an artifact of THIS run, so the user cannot map them back
+    // to anything in their plan. Worse, this fires on plans whose task graph is
+    // a perfectly good DAG — two same-tier tasks sharing a file are merged
+    // unconditionally, and if a task of another tier sits between them in the
+    // dependency chain (A standard/f.ts → C mechanical → B standard/f.ts) the
+    // mandatory A+B merge manufactures a cycle that exists only at bundle
+    // level. So print the members and files, and say so.
+    const detail = [...remaining.values()].map((b) => {
+      const blockers = b.blockedByBundles.filter((d) => remaining.has(d));
+      return `  ${b.id} — tasks ${b.taskIds.join(", ")}; files ${b.files.length ? b.files.join(", ") : "(none)"}` +
+        `; blocked by ${blockers.length ? blockers.join(", ") : "(none in cycle)"}`;
+    }).join("\n");
+    console.error(
+      `bundle-plan: dependency cycle among bundles ${[...remaining.keys()].join(", ")}:\n${detail}\n` +
+      `This can happen on a genuinely acyclic plan. Two same-tier tasks that share a file are ` +
+      `always merged into one bundle; if a task of a different tier sits between them in the ` +
+      `dependency chain, that mandatory merge creates a cycle at the bundle level that does not ` +
+      `exist between the tasks themselves. Remedy: split the shared file's usage so exactly one ` +
+      `task owns it, or retier the tasks so the chain no longer crosses tiers.`
+    );
     process.exit(1);
   }
   for (const b of ready) { ordered.push(b); remaining.delete(b.id); }

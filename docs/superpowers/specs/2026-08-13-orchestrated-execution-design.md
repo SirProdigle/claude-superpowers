@@ -230,7 +230,7 @@ out of scope for this work and tracked separately.
 | No `bd` / no `.beads/` | Offer `bd init`, continue untracked, or cancel |
 | Bundle exceeds size cap | `bundle-plan.mjs` exits non-zero naming the tasks, the shared files, and the restructuring needed |
 | Any task missing `modelTier` | Script refuses to start; no defaulting |
-| Implementer returns null | Fatal — the notes chain is broken and later bundles would build on a hole |
+| Implementer returns null | Non-fatal — the notes chain records `(agent returned nothing)` for that bundle and the run continues. Throwing here would discard every bundle already implemented and committed; the sentinel is honest, visible to every later bundle, and the blast radius is bounded by the review and test phases that follow |
 | Reviewer returns null | Non-fatal, logged |
 | Test loop exhausted | Stop, branch intact, report failing tests and both fix diffs |
 | Workflow dies mid-run | Beads shows what completed; `resumeFromRunId` replays cached agents |
@@ -256,3 +256,33 @@ the shared `CTX` conventions block injected into every agent, and the `FINDINGS`
 - Automatic re-bundling if a bundle proves mis-sized mid-run.
 - Migration of the two existing Backlog.md boards.
 - Any change to `subagent-driven-development` or `executing-plans`.
+
+## Implementation deviations (recorded during execution)
+
+This spec is canonical, so where the shipped code diverged from the design above, the divergence is
+recorded here rather than left for a reader to discover. (The plan document carries the same section
+for its own deviations.)
+
+**Bundling — "both tasks being small" is no longer a merge signal.** The Bundling section above
+lists three merge signals; only two survived. Merging zero-coupling same-tier tasks fabricated
+dependency cycles in the bundle graph, and the obvious guard (task-level `blockedBy` reachability)
+is unsound, because bundle-level precedence is a strict superset of task-level precedence — a merged
+bundle can itself bridge two tasks with no direct edge between them. `bundle-plan.mjs` therefore
+merges only on a shared entry in `files[]` or a direct `blockedBy` edge. Two fixtures
+(`bridged-pair-forward`, `bridged-pair-reverse`) pin the counterexamples.
+
+**Model routing — the `sonnet | opus | fable` mapping is an example, not this project's config.**
+The Model routing section states the project mapping as fact. No `model-routing.json` is checked in
+at either the project path (`docs/superpowers/model-routing.json`) or the user path
+(`~/.claude/superpowers/model-routing.json`); `/onboard` writes the real file for whoever installs
+the plugin. Treat that triple as an illustration of the tier→model shape only. The README carried
+the same false claim and was corrected during Task 6.
+
+**Architecture — the flow omits the mandatory taskId→beadId rewrite.** The diagram goes straight
+from `bd create` (step 3) to reading the manifest and launching (step 4). In the shipped skill there
+is a load-bearing step between them, `orchestrating-execution` Step 6b: `bundle-plan.mjs` writes
+integer `.tasks.json` ids into each bundle's `taskIds`, while `orchestrate.js` prompts every
+implementer to run `bd show <id>` with exactly those values. The coordinator must substitute bead
+ids into the bundles before launch (rebuilding the map from `bd list --parent`, not from memory), or
+every implementer's first command fails. Untracked mode substitutes the plan-document `Task <N>:`
+numbers instead.

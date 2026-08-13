@@ -146,6 +146,56 @@ test("accepts blockedByBundles naming a bundle earlier in the array", () => {
 // verify() before falling through to "exhausted", so a fix applied on the
 // last iteration is checked instead of being reported as still-red by
 // default (which, in full mode, silently cancels Refactor on a green tree).
+// ---- final review: the workflow body, actually executed ----
+//
+// The guarded workflow body can't be imported (top-level `return`) but it CAN
+// be executed: strip the prelude's `export`s, wrap prelude+body in a Function
+// whose parameters are the globals the Workflow tool injects, and drive it with
+// stub agents. That makes the run's return shape testable for real instead of
+// by grepping the source, which is what `lastTestSummary` needs — its value is
+// behavioural (the failing-test detail when red, null when green).
+const runWorkflow = async (testResult: (label: string) => any, mode = "simple") => {
+  const stripped = prelude.replace(/^export /gm, "");
+  const body = src.slice(idx);
+  const fn = new Function(
+    "agent", "parallel", "phase", "log", "args",
+    `${stripped}\nreturn (async () => {\n${body}\n})();`
+  );
+  const dispatches: any[] = [];
+  const agent = async (_prompt: string, o: any) => {
+    dispatches.push(o);
+    return o.label.startsWith("test:") ? testResult(o.label) : `did ${o.label}`;
+  };
+  const parallel = async (fns: any[]) => Promise.all(fns.map((f) => f()));
+  const args = {
+    mode, routing: ROUTING, ...CTX,
+    bundles: [{ id: "b1", tier: "standard", taskIds: [1] }],
+  };
+  const result = await fn(agent, parallel, () => {}, () => {}, args);
+  return { result, dispatches };
+};
+
+test("a green run returns lastTestSummary: null", async () => {
+  const { result } = await runWorkflow(() => ({ pass: true, summary: "all 40 tests pass" }));
+  expect(result.greenAfterImpl).toBe(true);
+  expect(result.lastTestSummary).toBeNull();
+});
+
+test("an exhausted test loop returns the final test agent's summary, not just greenAfterImpl:false", async () => {
+  const summary = "FAIL src/thing.test.ts > widget rounds down — expected 2, got 3";
+  const { result } = await runWorkflow(() => ({ pass: false, summary }));
+  expect(result.greenAfterImpl).toBe(false);
+  // Without this the coordinator has to recover the failure from run logs.
+  expect(result.lastTestSummary).toBe(summary);
+});
+
+test("a test agent that returns nothing yields a visible sentinel, never a green-looking null", async () => {
+  const { result } = await runWorkflow(() => null);
+  expect(result.greenAfterImpl).toBe(false);
+  expect(result.lastTestSummary).toBeTruthy();
+  expect(result.lastTestSummary).toContain("no summary");
+});
+
 test("test loop does a final mechanical verification before giving up", () => {
   const body = src.slice(idx);
   const loopToExhausted = body.slice(

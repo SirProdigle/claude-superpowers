@@ -216,6 +216,13 @@ ${cross.map(fmt).join("\n")}`,
   }
 
   // ---- Test loop: run at mechanical, fix at standard, escalate once.
+  //
+  // The last verification's summary is surfaced in the workflow result, not
+  // just written to the run log: `greenAfterImpl: false` on its own tells the
+  // coordinator that something failed but nothing about WHAT, forcing it to
+  // go digging through log output to report anything useful. Null means the
+  // final verification passed.
+  let lastTestSummary = null;
   const testLoop = async (round) => {
     phase("Test");
     const verify = (label) => dispatch(
@@ -227,7 +234,7 @@ Do not fix anything.`,
     let tier = "standard";
     for (let i = 0; i < 2; i++) {
       const res = await verify(`test:${round}:${i}`);
-      if (res && res.pass) { log(`tests green (${round}, round ${i})`); return true; }
+      if (res && res.pass) { lastTestSummary = null; log(`tests green (${round}, round ${i})`); return true; }
       await dispatch(
         `Fix these test/typecheck failures. Fix code or tests, whichever is wrong. Run until green,
 commit as "${epicId}: test fixes".
@@ -243,7 +250,11 @@ ${res ? res.summary : "test agent returned nothing — run the suite yourself an
     // one more mechanical-tier verification, not a third fix round — the
     // "max 2 fix rounds" bound is unaffected.
     const finalRes = await verify(`test:${round}:final`);
-    if (finalRes && finalRes.pass) { log(`tests green (${round}, final check)`); return true; }
+    if (finalRes && finalRes.pass) { lastTestSummary = null; log(`tests green (${round}, final check)`); return true; }
+    // Same sentinel convention as the implementer notes chain: a missing
+    // summary is reported as a visible string rather than as null, which the
+    // coordinator would otherwise read as "tests passed".
+    lastTestSummary = (finalRes && finalRes.summary) || "(test agent returned no summary)";
     log(`test loop exhausted after 2 fix rounds (${round}) — stopping, branch left intact`);
     return false;
   };
@@ -277,6 +288,7 @@ ${plan}`,
     findings: findings.length,
     greenAfterImpl,
     greenAfterRefactor,
+    lastTestSummary,
     notes,
   };
 }

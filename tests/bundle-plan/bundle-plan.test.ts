@@ -222,6 +222,30 @@ test("MINOR: the restructure hint is present when the breach does have a shared 
   expect(r.stderr).toContain("Restructure the plan");
 });
 
+// --- final review regressions ---
+
+test("the bundle-cycle error names members, files, and the acyclic-plan explanation", async () => {
+  // A(standard, src/f.ts) -> C(mechanical) -> B(standard, src/f.ts). The task
+  // graph is a clean DAG, but A and B share a file at the same tier so they
+  // are merged unconditionally, and the merged bundle then has to both precede
+  // and follow C's bundle. The old message ("dependency cycle among bundles
+  // b1, b2") told the user their DAG was cyclic, which it isn't, and named
+  // neither the member tasks nor the shared file that forced the merge.
+  const r = await run("forced-merge-cycle.tasks.json");
+  expect(r.code).toBe(1);
+  expect(r.stderr).toContain("dependency cycle");
+  // every bundle in the cycle is named with its members and its files
+  expect(r.stderr).toContain("tasks 1, 3");
+  expect(r.stderr).toContain("tasks 2");
+  expect(r.stderr).toContain("src/f.ts");
+  expect(r.stderr).toContain("src/c.ts");
+  // and the message says this can happen on a valid plan, with the remedy
+  expect(r.stderr).toContain("genuinely acyclic plan");
+  expect(r.stderr).toContain("share a file");
+  expect(r.stderr).toMatch(/split the shared file's usage/);
+  expect(r.stderr).toMatch(/retier/);
+});
+
 test("MINOR: a repeated cap flag honours its last occurrence", async () => {
   // oversized.tasks.json is a 6-task bundle; --max-tasks 3 would still
   // reject it, but the later --max-tasks 99 must win.

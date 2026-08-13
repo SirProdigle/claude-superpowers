@@ -53,3 +53,21 @@ test("--max-tasks raises the cap", async () => {
   const r = await run("oversized.tasks.json", "--max-tasks", "10");
   expect(r.code).toBe(0);
 });
+
+test("fenced json:metadata description produces identical bundles to top-level metadata", async () => {
+  const a = await run("simple.tasks.json");
+  const b = await run("fenced.tasks.json");
+  expect(a.code).toBe(0);
+  expect(b.code).toBe(0);
+  // generatedFrom legitimately differs (it records which input file was read);
+  // everything else — bundles, taskTiers, caps, planPath — must match exactly.
+  const strip = ({ generatedFrom, ...rest }: any) => rest;
+  expect(strip(JSON.parse(b.stdout))).toEqual(strip(JSON.parse(a.stdout)));
+});
+
+test("rejects a task with a malformed json:metadata fence", async () => {
+  const r = await run("malformed-fence.tasks.json");
+  expect(r.code).toBe(1);
+  expect(r.stderr).toContain("task 2");
+  expect(r.stderr).toContain("fence");
+});

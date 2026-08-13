@@ -25,11 +25,39 @@ if (!input) {
 const doc = JSON.parse(readFileSync(input, "utf8"));
 const tasks = doc.tasks || [];
 
+// --- metadata can live in two places depending on plan vintage:
+// older plans carry a structured top-level `metadata: {files[], modelTier}`;
+// plans generated today carry that data only as a ```json:metadata fenced
+// block at the end of `description` (see skills/shared/task-format-reference.md).
+// Accept both, transparently, everywhere metadata is read.
+const FENCE_RE = /```json:metadata\s*([\s\S]*?)```/g;
+function readMeta(t) {
+  if (t.metadata && typeof t.metadata === "object" && "modelTier" in t.metadata) {
+    return t.metadata;
+  }
+  const desc = t.description || "";
+  FENCE_RE.lastIndex = 0;
+  let match, last;
+  while ((match = FENCE_RE.exec(desc)) !== null) last = match;
+  if (last) {
+    try {
+      return JSON.parse(last[1]);
+    } catch (e) {
+      console.error(
+        `bundle-plan: task ${t.id} ("${t.subject}") has a malformed json:metadata fence in its ` +
+        `description (${e.message}). Fix the fence's JSON before bundling.`
+      );
+      process.exit(1);
+    }
+  }
+  return {};
+}
+
 // --- validate: every task must carry a tier. No defaulting. A silent default
 // here is an expensive silent default at dispatch time.
 const VALID = new Set(["mechanical", "standard", "frontier"]);
 for (const t of tasks) {
-  const tier = t.metadata?.modelTier;
+  const tier = readMeta(t).modelTier;
   if (!VALID.has(tier)) {
     console.error(
       `bundle-plan: task ${t.id} ("${t.subject}") has modelTier=${JSON.stringify(tier)}; ` +
@@ -39,8 +67,8 @@ for (const t of tasks) {
   }
 }
 
-const filesOf = (t) => new Set(t.metadata?.files || []);
-const tierOf = (t) => t.metadata.modelTier;
+const filesOf = (t) => new Set(readMeta(t).files || []);
+const tierOf = (t) => readMeta(t).modelTier;
 
 // --- union-find over tasks, constrained to same-tier merges
 const parent = new Map(tasks.map((t) => [t.id, t.id]));

@@ -9,6 +9,82 @@ upstream credit belongs to Jesse Vincent and the pcvelz maintainer.
 
 ---
 
+## Orchestrated Execution — Optional Flow
+
+*Canonical design doc: [`docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md`](docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md). The section below is a reader-facing summary.*
+
+`writing-plans` hands off to one of four options, not two. Alongside **Subagent-Driven** (fresh
+subagent per task, this session) and **Parallel Session** (separate worktree session), two
+**Orchestrated** options run the plan through a fixed Workflow-tool script
+(`scripts/orchestrate.js`) instead of a coordinator loop:
+
+| Option | Pipeline |
+|---|---|
+| **Orchestrated — Simple** | Implement → one combined review-and-fix pass → bounded test loop |
+| **Orchestrated — Full** | Implement → per-bundle review + whole-plan review → routed fixes → test loop → refactor → test loop |
+
+Pick Orchestrated when the plan is large enough to want a whole-epic review pass and a refactor
+step that `subagent-driven-development` has no phase for. Pick Simple over Full for a plan too
+small to justify a second review layer; pick Full when cross-bundle integration risk or
+accumulated cruft make that layer worth the cost.
+
+Both pipelines implement bundles **sequentially**, chaining short notes from each finished bundle
+into the next implementer's prompt — this is what keeps conventions consistent across the plan, at
+the cost of wall-clock parallelism. Full mode adds a whole-plan review (catching cross-bundle
+integration issues per-task review can't see), routes fixes back to the bundle that owns them, and
+runs a refactor pass *after* the first green test loop, not before — refactoring unverified code
+makes it impossible to tell an implementation bug from a refactor bug.
+
+### Why the script enforces model routing, not a hook
+
+The [Subagent Model Routing](#subagent-model-routing--optional-flow) hooks above do not fire here:
+`PreToolUse:Agent` does not trigger for a Workflow tool's internal `agent()` spawns. So
+`orchestrate.js` resolves every dispatch's tier to a model itself, refuses to start if any bundle
+is missing a tier, and logs the tier and resolved model on every dispatch as the audit trail the
+hook would otherwise produce.
+
+### Bundling
+
+`scripts/bundle-plan.mjs` turns a plan's `.tasks.json` into a `.bundles.json` manifest: it never
+merges tasks across `modelTier`, and within a tier it merges only on real coupling — overlapping
+`files[]` or a direct `blockedBy` edge. There is deliberately no third rule that packs same-tier
+tasks together just for being small; an earlier version of this design had one, and it turned out
+to fabricate dependency cycles between otherwise-unrelated bundles, so it was removed. Bundles are
+capped at 5 tasks or 15 files (whichever binds first, both overridable) — a breach is treated as a
+plan defect and the script exits non-zero naming the tasks and files responsible, rather than
+silently shipping an oversized bundle. Within a bundle, `taskIds` are ordered topologically by the
+tasks' own `blockedBy` graph (ties broken by ascending id), not numerically, so a bundle never
+lists a task before the one that blocks it.
+
+### Model tiers
+
+Tasks in `writing-plans` carry a `modelTier` of `mechanical`, `standard`, or `frontier` (see
+[The tiers](#the-tiers) above); `orchestrate.js` never sees or names a concrete model — it reads
+`docs/superpowers/model-routing.json` and turns each bundle's tier into whatever model that
+project's file maps it to. This project's own routing file maps `mechanical → sonnet`,
+`standard → opus`, `frontier → fable`, but that mapping is this project's configuration, not
+built-in behavior — a different project's file can point the same three tiers anywhere.
+
+### Tracking: Beads, not Backlog.md
+
+`writing-plans` still creates native tasks as the plan-time artifact, but the durable record of an
+orchestrated run is [Beads](https://github.com/steveyegge/beads) (`bd`): the plan is ported into a
+Beads epic before the workflow launches. This fork's earlier Backlog.md-based epic layer has been
+removed in favor of `bd`. If `bd` isn't on `PATH` or `.beads/` doesn't exist,
+the handoff asks whether to run `bd init`, continue untracked (a degraded path — no durable
+record, and `bd show`-shaped prompts still get sent to agents that have no `bd`), or cancel.
+
+Routing also needs `docs/superpowers/model-routing.json` to exist; `/onboard` writes it. Without
+it, the skill stops rather than guessing which model a tier means.
+
+### The `/complete-epic` dependency
+
+On completion, `orchestrating-execution` suggests running `/complete-epic <epic-id>`. That command
+does **not** ship with this plugin — it's a user-level slash command that lives in
+`~/.claude/commands/`, so a fresh install of this fork won't have it until you add it yourself.
+
+---
+
 **Local changes** live on top of upstream and are re-applied after each merge via
 [`scripts/rebrand.sh`](scripts/rebrand.sh). To pull upstream in:
 

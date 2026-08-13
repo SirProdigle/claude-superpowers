@@ -1,0 +1,7 @@
+{
+  "planPath": "docs/superpowers/plans/x.md",
+  "tasks": [
+    {"id": 0, "subject": "A", "status": "pending", "metadata": {"files": ["src/a.ts"], "modelTier": "mechanical"}}
+  ],
+  "lastUpdated": "2026-08-13T00:00:00Z"
+}

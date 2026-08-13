@@ -1,0 +1,8 @@
+{
+  "planPath": "docs/superpowers/plans/x.md",
+  "tasks": [
+    {"id": 0, "subject": "A", "status": "pending", "metadata": {"files": ["src/f1.ts", "src/f2.ts", "src/f3.ts", "src/f4.ts", "src/f5.ts", "src/f6.ts", "src/f7.ts", "src/f8.ts"], "modelTier": "standard"}},
+    {"id": 1, "subject": "B", "status": "pending", "blockedBy": [0], "metadata": {"files": ["src/f9.ts", "src/f10.ts", "src/f11.ts", "src/f12.ts", "src/f13.ts", "src/f14.ts", "src/f15.ts", "src/f16.ts", "src/f17.ts"], "modelTier": "standard"}}
+  ],
+  "lastUpdated": "2026-08-13T00:00:00Z"
+}

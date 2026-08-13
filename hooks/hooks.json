@@ -45,21 +45,6 @@
           }
         ]
       }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/hooks/sync-backlog-status.ts\""
-          },
-          {
-            "type": "command",
-            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/hooks/remind-backlog-reconcile.ts\""
-          }
-        ]
-      }
     ]
   }
 }

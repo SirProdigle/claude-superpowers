@@ -7,29 +7,6 @@ so it installs alongside the originals rather than shadowing them.
 **Lineage:** `obra/superpowers` → `pcvelz/superpowers` → this fork. MIT throughout; all
 upstream credit belongs to Jesse Vincent and the pcvelz maintainer.
 
-## What this fork adds beyond upstream
-
-**The epic layer** (formerly the standalone `superpowers-tracker` plugin, merged in here).
-Superpowers gives you good *plans*; this is the altitude above them — a git-native Backlog.md
-board per repo where each epic is a parent card and each superpowers plan is a child card whose
-status is derived from the plan's checkboxes.
-
-| Skill | Use |
-|---|---|
-| `tracking-with-backlog` | Always-on in a repo with `backlog/config.yml` — read the board, keep it in sync |
-| `planning-an-epic` | Work spans more than one plan — decompose into epic + child plan-cards |
-| `linking-a-plan` | Right after a spec/plan is written — wire the bidirectional card ⇄ plan link |
-| `converting-a-design` | An approved design doc needs reconciling onto the board as epics |
-| `adopting-backlog` | Onboard a repo that has no board yet, migrating any hand-rolled TODO |
-
-Requires the Backlog.md CLI: `bun add -g backlog.md`. Two `PostToolUse` hooks
-(`sync-backlog-status.ts`, `remind-backlog-reconcile.ts`) keep card status derived from plan
-checkboxes and nudge when a design doc isn't on the board yet.
-
-**Note for upstream merges:** `hooks/hooks.json` is the one shared file this fork extends —
-the `PostToolUse` block is ours, everything else is upstream's. Expect to resolve that file by
-hand if upstream touches it.
-
 ---
 
 **Local changes** live on top of upstream and are re-applied after each merge via

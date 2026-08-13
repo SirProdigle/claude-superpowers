@@ -4,6 +4,18 @@
 // Workflow agent() spawns (measured 2026-08-13, see the design doc). Every
 // dispatch resolves its model from the tier map and is logged, because that log
 // is the only routing audit trail that exists inside a workflow.
+//
+// THIS IS A WORKFLOW-TOOL SCRIPT, NOT AN IMPORTABLE ES MODULE. The Claude Code
+// Workflow tool wraps this file's body in a function before running it, so the
+// top-level `return` at the end of the workflow-body guard below is
+// intentional and required — it is how the workflow surfaces its result to
+// the run summary. `node --check` and a plain ESM `import` of the whole file
+// will therefore fail with "Illegal return statement" / "Top-level return
+// cannot be used inside an ECMAScript module" — BY DESIGN. Do not "fix" that
+// by removing the return or turning it into an exported binding; that
+// silently drops the workflow's result. tests/orchestrate/resolve.test.ts
+// tests the pure helpers above the guard by slicing the source text, not by
+// importing this file as a module.
 
 export const TIERS = ["mechanical", "standard", "frontier"];
 
@@ -70,13 +82,10 @@ const TESTRES = {
   required: ["pass", "summary"],
 };
 
-// Set by the workflow body below when it runs under the Workflow tool. Exported
-// as a live binding (not returned) because top-level `return` is a SyntaxError
-// in an ES module — this file must stay import-able by `bun test`.
-export let result = null;
-
 // Workflow body — only runs under the Workflow tool, where `agent`, `phase`,
-// `log` and `args` are globals. Guarded so `bun test` can import the helpers.
+// `log` and `args` are globals. Guarded so `bun test` can read the helper
+// prelude above without executing this block (see the file-top note on why
+// the trailing `return` below is intentional).
 if (typeof agent === "function") {
   const A = typeof args === "string" ? JSON.parse(args) : args;
   validateArgs(A);
@@ -216,7 +225,7 @@ ${plan}`,
     greenAfterRefactor = await testLoop("post-refactor");
   }
 
-  result = {
+  return {
     epicId,
     mode,
     bundles: bundles.length,

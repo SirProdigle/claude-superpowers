@@ -32,7 +32,7 @@
     {
       "id": 14,
       "subject": "Task 5: Wire the handoff",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Add the two Orchestrated options to the execution handoff and teach the guard about the new skill.\n\n**Files:**\n- Modify: `skills/writing-plans/SKILL.md` \u2014 the `AskUserQuestion` block and both HARD-GATE routing branches\n- Modify: `hooks/pre-askuser-handoff-guard` \u2014 disarm list (two places) and the teach message\n- Modify: `tests/claude-code/test-handoff-guard.sh` \u2014 new cases\n\n**Acceptance Criteria:**\n- [ ] The handoff offers four options; both original labels are unchanged\n- [ ] A four-option menu containing both required labels passes the guard (exit 0)\n- [ ] A `Skill` call to `claude-superpowers:orchestrating-execution` disarms the guard\n- [ ] The block message no longer claims exactly two options are permitted\n- [ ] `writing-plans` routes each Orchestrated option to `claude-superpowers:orchestrating-execution`\n\n**Verify:** `bash tests/claude-code/test-handoff-guard.sh` \u2192 all assertions pass\n\n```json:metadata\n{\"files\": [\"skills/writing-plans/SKILL.md\", \"hooks/pre-askuser-handoff-guard\", \"tests/claude-code/test-handoff-guard.sh\"], \"verifyCommand\": \"bash tests/claude-code/test-handoff-guard.sh && claude plugin validate .\", \"acceptanceCriteria\": [\"The handoff offers four options; both original labels are unchanged\", \"A four-option menu containing both required labels passes the guard (exit 0)\", \"A `Skill` call to `claude-superpowers:orchestrating-execution` disarms the guard\", \"The block message no longer claims exactly two options are permitted\", \"`writing-plans` routes each Orchestrated option to `claude-superpowers:orchestrating-execution`\"], \"modelTier\": \"standard\"}\n```",
       "blockedBy": [
         13
@@ -49,5 +49,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-08-13T06:00:00Z"
+  "lastUpdated": "2026-08-13T06:40:00Z"
 }

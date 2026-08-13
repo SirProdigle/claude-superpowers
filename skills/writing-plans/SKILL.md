@@ -203,6 +203,10 @@ AskUserQuestion:
       description: "I dispatch fresh subagent per task, review between tasks, fast iteration"
     - label: "Parallel Session (separate)"
       description: "Open new session in worktree with executing-plans, batch execution with checkpoints; it can message this session to consult"
+    - label: "Orchestrated — Simple"
+      description: "Bundled sequential implementation, one review-and-fix pass, then tests. Tracked in Beads."
+    - label: "Orchestrated — Full"
+      description: "Bundled implementation, layered review, routed fixes, tests, refactor, tests. Tracked in Beads."
 ```
 
 **If you are about to call ExitPlanMode, STOP — call AskUserQuestion instead.**
@@ -219,6 +223,12 @@ Invoke the Skill tool: `claude-superpowers:subagent-driven-development`
 **If Parallel Session chosen:**
 Guide the user to open a new session in the worktree, then invoke: `claude-superpowers:executing-plans`
 - The executing session can consult this session (the plan author) via SendMessage. Keep this session alive to answer questions.
+
+**If either Orchestrated option chosen:**
+Invoke the Skill tool: `claude-superpowers:orchestrating-execution`
+- Pass the chosen mode (Simple or Full) to the skill
+- The skill handles bundling, Beads, and launching the workflow
+- Do NOT implement tasks yourself
 </HARD-GATE>
 
 ---

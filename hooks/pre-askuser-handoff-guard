@@ -166,10 +166,12 @@ with f:
                 # Execution disarm signals — Skill tool_use
                 if name == "Skill":
                     skill_val = inp.get("skill", "") or ""
-                    if (skill_val in ("subagent-driven-development", "executing-plans", "execute-plan")
+                    if (skill_val in ("subagent-driven-development", "executing-plans",
+                                      "execute-plan", "orchestrating-execution")
                             or skill_val.endswith(":subagent-driven-development")
                             or skill_val.endswith(":executing-plans")
-                            or skill_val.endswith(":execute-plan")):
+                            or skill_val.endswith(":execute-plan")
+                            or skill_val.endswith(":orchestrating-execution")):
                         disarm_pos = pos
 
                 # Compliant prior handoff: AskUserQuestion whose options include both required labels
@@ -197,7 +199,8 @@ with f:
 
             # execution disarm via user message
             if ("claude-superpowers:subagent-driven-development" in text
-                    or "claude-superpowers:executing-plans" in text):
+                    or "claude-superpowers:executing-plans" in text
+                    or "claude-superpowers:orchestrating-execution" in text):
                 disarm_pos = pos
 
 # armed iff: arm_pos set AND (no disarm OR disarm before arm)
@@ -253,10 +256,11 @@ trace "?" "block" "armed=true, required labels missing"
     echo "EXECUTION HANDOFF VIOLATION — WRONG AskUserQuestion STRUCTURE"
     echo ""
     echo "writing-plans was invoked and tasks were created, but this AskUserQuestion"
-    echo "is not the mandated Execution Handoff. The skill's HARD-GATE permits exactly"
-    echo "one structure here."
+    echo "is not the mandated Execution Handoff. The skill's HARD-GATE requires the"
+    echo "two labels below to be present in the options; additional Orchestrated"
+    echo "options are permitted alongside them."
     echo ""
-    echo "Required structure (copy this exactly):"
+    echo "Required structure (copy this exactly; extra options are allowed):"
     echo ""
     echo "  AskUserQuestion:"
     echo "    question: \"Plan complete and saved to docs/superpowers/plans/<filename>.md. How would you like to execute it?\""
@@ -266,6 +270,10 @@ trace "?" "block" "armed=true, required labels missing"
     echo "        description: \"I dispatch fresh subagent per task, review between tasks, fast iteration\""
     echo "      - label: \"Parallel Session (separate)\""
     echo "        description: \"Open new session in worktree with executing-plans, batch execution with checkpoints\""
+    echo "      - label: \"Orchestrated — Simple\""
+    echo "        description: \"Bundled sequential implementation, one review-and-fix pass, then tests. Tracked in Beads.\""
+    echo "      - label: \"Orchestrated — Full\""
+    echo "        description: \"Bundled implementation, layered review, routed fixes, tests, refactor, tests. Tracked in Beads.\""
     echo ""
     echo "Options:"
     echo "  1. Re-issue AskUserQuestion with exactly that structure. This is the"

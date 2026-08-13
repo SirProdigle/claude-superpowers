@@ -104,6 +104,13 @@ cat > "$WORK/disarmed-by-execution.jsonl" <<'EOF'
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-superpowers:subagent-driven-development"}}]}}
 EOF
 
+# Transcript: armed, then disarmed by the orchestrating-execution skill.
+cat > "$WORK/disarmed-by-orchestrated.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-superpowers:writing-plans"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"TaskCreate","input":{"subject":"Task 1","description":"goal"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-superpowers:orchestrating-execution"}}]}}
+EOF
+
 # Transcript: armed, then disarmed by a prior compliant AskUserQuestion.
 python3 -c "
 import json, sys
@@ -165,6 +172,32 @@ inp = {
             'options': [
                 {'label': 'Subagent-Driven (this session)', 'description': 'I dispatch fresh subagent per task, review between tasks, fast iteration'},
                 {'label': 'Parallel Session (separate)', 'description': 'Open new session in worktree with executing-plans, batch execution with checkpoints'}
+            ]
+        }]
+    },
+    'transcript_path': sys.argv[1],
+    'cwd': sys.argv[2]
+}
+print(json.dumps(inp))
+" "$transcript" "$cwd"
+}
+
+# Four-option handoff: both required labels plus the two Orchestrated options.
+make_four_option_input() {
+    local transcript="$1" cwd="${2:-$WORK/project}"
+    python3 -c "
+import json, sys
+inp = {
+    'tool_name': 'AskUserQuestion',
+    'tool_input': {
+        'questions': [{
+            'question': 'Plan complete and saved to docs/superpowers/plans/2026-06-10-foo.md. How would you like to execute it?',
+            'header': 'Execution',
+            'options': [
+                {'label': 'Subagent-Driven (this session)', 'description': 'per-task subagents'},
+                {'label': 'Parallel Session (separate)', 'description': 'separate session in a worktree'},
+                {'label': 'Orchestrated — Simple', 'description': 'bundled, one review-and-fix pass, tests'},
+                {'label': 'Orchestrated — Full', 'description': 'bundled, layered review, fixes, tests, refactor, tests'}
             ]
         }]
     },
@@ -419,6 +452,18 @@ INPUT=$(make_wrong_options_input "$WORK/armed-via-skill.jsonl")
 _rc=0
 env HOME="$ISOLATED_HOME" /bin/bash "$HOOK" >/dev/null 2>"$WORK/stderr" <<< "$INPUT" && _rc=$? || _rc=$?
 assert "armed wrong-menu blocks under /bin/bash" "2" "$_rc"
+echo ""
+
+echo "Test 22: four-option handoff incl. Orchestrated → allow"
+INPUT=$(make_four_option_input "$WORK/armed-via-skill.jsonl")
+rc=$(run_hook "$INPUT")
+assert "exit code" "0" "$rc"
+echo ""
+
+echo "Test 23: disarmed by orchestrating-execution → allow"
+INPUT=$(make_wrong_options_input "$WORK/disarmed-by-orchestrated.jsonl")
+rc=$(run_hook "$INPUT")
+assert "exit code" "0" "$rc"
 echo ""
 
 echo "=== Summary: $FAILED failure(s) ==="

@@ -97,6 +97,11 @@ Input `<plan>.tasks.json`, output `<plan>.bundles.json`.
 3. **Order bundles** by the `blockedBy` graph.
 4. **Reject** any bundle over the size cap, or any task missing `modelTier`.
 
+The size cap defaults to **5 tasks or 15 distinct files**, whichever binds first, overridable via
+`--max-tasks` / `--max-files`. The numbers are a smell test, not a hard truth: a bundle past either
+threshold usually means several tasks share a file that ought to be touched once, which is a plan
+problem the bundler should surface rather than absorb.
+
 A representative 10-task plan (7 `standard`, 3 `mechanical`) yields roughly 4 bundles, matching the
 hand-tuned batching already recorded in `task-batching-user-2026-08-12`.
 
@@ -106,7 +111,7 @@ hand-tuned batching already recorded in `task-batching-user-2026-08-12`.
 SIMPLE
   1. Implement    sequential bundles, notes chained     model = bundle tier
   2. Review & Fix one agent reviews AND fixes           standard
-  3. Test         run → bounded loop                    mechanical / standard → frontier
+  3. Test         run → fix loop, max 2 rounds     mechanical / standard → frontier
 
 FULL
   1. Implement    sequential bundles, notes chained     model = bundle tier
@@ -114,10 +119,10 @@ FULL
                 + whole-epic review                     frontier
   3. Fixes        routed by owning bundle, sequential   standard
                 + one cross-cutting pass                standard
-  4. Test         run → bounded loop                    mechanical / standard → frontier
+  4. Test         run → fix loop, max 2 rounds     mechanical / standard → frontier
   5. Refactor     plan                                  frontier
                   execute                               standard
-  6. Test         run → bounded loop                    mechanical / standard → frontier
+  6. Test         run → fix loop, max 2 rounds     mechanical / standard → frontier
 ```
 
 **Implementation is sequential and notes are chained.** Each implementer receives short summaries

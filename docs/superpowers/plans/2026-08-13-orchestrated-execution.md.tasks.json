@@ -16,7 +16,7 @@
     {
       "id": 12,
       "subject": "Task 3: Workflow orchestration script",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** `scripts/orchestrate.js` runs the Simple and Full pipelines, resolving tier\u2192model itself.\n\n**Files:**\n- Create: `scripts/orchestrate.js`\n- Create: `tests/orchestrate/resolve.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `resolveModel(tier, routing)` returns the mapped model, and throws naming the tier when unmapped\n- [ ] `validateArgs` throws when any bundle lacks a tier, when `mode` is not `simple`/`full`, or when `bundles` is empty\n- [ ] Simple runs Implement \u2192 Review&Fix \u2192 Test; Full runs Implement \u2192 Review \u2192 Fixes \u2192 Test \u2192 Refactor \u2192 Test\n- [ ] Implementation is sequential and each dispatch receives all prior bundles' notes\n- [ ] Every dispatch is logged with its bundle id, tier and resolved model\n- [ ] The test loop runs at most 2 fix rounds, escalating one tier on round 2\n\n**Verify:** `bun test tests/orchestrate/` \u2192 all pass\n\n```json:metadata\n{\"files\": [\"scripts/orchestrate.js\", \"tests/orchestrate/resolve.test.ts\"], \"verifyCommand\": \"bun test tests/orchestrate/\", \"acceptanceCriteria\": [\"`resolveModel(tier, routing)` returns the mapped model, and throws naming the tier when unmapped\", \"`validateArgs` throws when any bundle lacks a tier, when `mode` is not `simple`/`full`, or when `bundles` is empty\", \"Simple runs Implement \\u2192 Review&Fix \\u2192 Test; Full runs Implement \\u2192 Review \\u2192 Fixes \\u2192 Test \\u2192 Refactor \\u2192 Test\", \"Implementation is sequential and each dispatch receives all prior bundles' notes\", \"Every dispatch is logged with its bundle id, tier and resolved model\", \"The test loop runs at most 2 fix rounds, escalating one tier on round 2\"], \"modelTier\": \"standard\"}\n```"
     },
     {
@@ -49,5 +49,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-08-13T04:20:00Z"
+  "lastUpdated": "2026-08-13T05:10:00Z"
 }

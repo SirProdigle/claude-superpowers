@@ -41,7 +41,7 @@
     {
       "id": 15,
       "subject": "Task 6: Document the new option",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** README covers Orchestrated execution and the Beads-only tracking model.\n\n**Files:**\n- Modify: `README.md`\n\n**Acceptance Criteria:**\n- [ ] A section describes both pipelines and when to pick each\n- [ ] States that routing is enforced in the script because `PreToolUse:Agent` does not fire in workflows\n- [ ] States the Beads requirement and the `bd init` fallback\n- [ ] Links to the design doc\n\n**Verify:** `grep -c 'Orchestrated' README.md` returns \u2265 3\n\n```json:metadata\n{\"files\": [\"README.md\"], \"verifyCommand\": \"grep -c 'Orchestrated' README.md\", \"acceptanceCriteria\": [\"A section describes both pipelines and when to pick each\", \"States that routing is enforced in the script because `PreToolUse:Agent` does not fire in workflows\", \"States the Beads requirement and the `bd init` fallback\", \"Links to the design doc\"], \"modelTier\": \"mechanical\"}\n```",
       "blockedBy": [
         10,
@@ -49,5 +49,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-08-13T06:40:00Z"
+  "lastUpdated": "2026-08-13T07:20:00Z"
 }

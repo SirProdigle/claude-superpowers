@@ -21,7 +21,11 @@ for (let i = 0; i < argv.length; i++) {
 }
 
 const flag = (name, def) => {
-  const i = argv.indexOf(`--${name}`);
+  // lastIndexOf, not indexOf: a repeated flag honours its LAST occurrence
+  // rather than silently keeping the first (or erroring) — simplest
+  // behaviour for a script that may itself be re-invoked with an appended
+  // override.
+  const i = argv.lastIndexOf(`--${name}`);
   if (i === -1) return def;
   const raw = argv[i + 1];
   const n = Number(raw);
@@ -136,60 +140,23 @@ for (let i = 0; i < tasks.length; i++) {
   }
 }
 
-// --- task-level precedence graph (fixed for the whole run — merging groups
-// doesn't change which task blocks which). Used below so the packing pass
-// can refuse a merge that would force a bundle to both precede and follow
-// itself transitively through some other, unrelated bundle.
-const dependentsOf = new Map();
-for (const t of tasks) {
-  for (const dep of t.blockedBy || []) {
-    if (!dependentsOf.has(dep)) dependentsOf.set(dep, []);
-    dependentsOf.get(dep).push(t.id);
-  }
-}
-const reachableFrom = (startIds) => {
-  const seen = new Set(startIds);
-  const stack = [...startIds];
-  while (stack.length) {
-    const cur = stack.pop();
-    for (const nxt of dependentsOf.get(cur) || []) {
-      if (!seen.has(nxt)) { seen.add(nxt); stack.push(nxt); }
-    }
-  }
-  return seen;
-};
-// true if any task in idsA must (transitively) precede any task in idsB,
-// or vice versa — i.e. merging the two groups would create a cycle.
-const hasPrecedencePath = (idsA, idsB) => {
-  const fromA = reachableFrom(idsA);
-  if (idsB.some((id) => fromA.has(id))) return true;
-  const fromB = reachableFrom(idsB);
-  return idsA.some((id) => fromB.has(id));
-};
-
-// --- pack leftover small singletons into same-tier bundles under cap.
-// Zero-coupling packing is the weakest justification in the algorithm, so
-// it must yield to correctness: never pack across an existing (even
-// indirect, multi-hop) dependency path — doing so can force a bundle to
-// both precede and follow another bundle, which is an unsatisfiable cycle.
+// --- bundles are groups formed purely by real coupling: shared files, or a
+// direct blockedBy edge (both established above). There is deliberately no
+// pass that packs mutually-uncoupled small singletons together: two rounds
+// of review each found a Critical defect in that pass — it can bridge two
+// otherwise-independent tasks into a single bundle that must both precede
+// and follow some third bundle it has no direct relationship with (proven
+// both through an intermediate-tier task, and through a same-tier coupled
+// pair acting as a bridge). Zero-coupling packing was the weakest merge
+// justification in the algorithm (no shared file, no dependency edge) for
+// a marginal benefit (fewer bundles for small unrelated tasks); correctness
+// and simplicity win. This is a deliberate deviation from the original
+// bundling rule, which listed "both tasks small" as a merge signal.
 const groups = new Map();
 for (const t of tasks) {
   const r = find(t.id);
   if (!groups.has(r)) groups.set(r, []);
   groups.get(r).push(t);
-}
-const isSmall = (t) => filesOf(t).size <= 2;
-for (const [root, members] of [...groups]) {
-  if (members.length !== 1 || !isSmall(members[0])) continue;
-  const solo = members[0];
-  const target = [...groups.entries()].find(([r, ms]) =>
-    r !== root &&
-    tierOf(ms[0]) === tierOf(solo) &&
-    ms.length + 1 <= MAX_TASKS &&
-    new Set([...ms.flatMap((m) => [...filesOf(m)]), ...filesOf(solo)]).size <= MAX_FILES &&
-    !hasPrecedencePath([solo.id], ms.map((m) => m.id))
-  );
-  if (target) { target[1].push(solo); groups.delete(root); }
 }
 
 // --- order a bundle's own taskIds by internal blockedBy precedence (ties
@@ -270,20 +237,18 @@ for (const b of bundles) {
   const shared = b.files.filter((f) =>
     b.taskIds.filter((id) => filesOf(tasks.find((t) => t.id === id)).has(f)).length > 1);
 
+  // With packing gone, every multi-task bundle exists only because of a
+  // shared file or a blockedBy edge somewhere inside it — there is no third
+  // cause left to name.
   let cause;
   if (shared.length) {
     cause = `Shared files forcing the merge: ${shared.join(", ")}.`;
   } else {
-    // No shared file overlap — the merge came from a blockedBy edge, or
-    // from same-tier singleton packing. Name whichever actually applies
-    // instead of a generic, potentially misleading fallback.
     const edgeTasks = b.taskIds.filter((id) => {
       const t = tasks.find((x) => x.id === id);
       return (t.blockedBy || []).some((dep) => b.taskIds.includes(dep));
     });
-    cause = edgeTasks.length
-      ? `No shared files; merged via a blockedBy edge (tasks ${edgeTasks.join(", ")}).`
-      : `No shared files or blockedBy edge; merged by same-tier singleton packing.`;
+    cause = `No shared files; merged via a blockedBy edge (tasks ${edgeTasks.join(", ")}).`;
   }
 
   const capNote = taskBreach && fileBreach
@@ -292,10 +257,17 @@ for (const b of bundles) {
       ? `the task cap (raise --max-tasks)`
       : `the file cap (raise --max-files)`;
 
+  // The restructure advice only makes sense when there's a shared file to
+  // restructure away — appending it unconditionally was misleading on the
+  // blockedBy-edge branch, which has nothing to do with shared files.
+  const restructureNote = shared.length
+    ? " Restructure the plan so each shared file is touched by one task."
+    : "";
+
   console.error(
     `bundle-plan: bundle ${b.id} has ${b.taskIds.length} tasks / ${b.files.length} files ` +
     `(cap ${MAX_TASKS}/${MAX_FILES}), breaching ${capNote}. Tasks: ${b.taskIds.join(", ")}. ` +
-    `${cause} Restructure the plan so each shared file is touched by one task.`
+    `${cause}${restructureNote}`
   );
   process.exit(1);
 }

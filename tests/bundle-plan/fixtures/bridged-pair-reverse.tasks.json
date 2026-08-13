@@ -1,0 +1,11 @@
+{
+  "planPath": "docs/superpowers/plans/x.md",
+  "tasks": [
+    {"id": 0, "subject": "Solo mechanical, blocked by the bridge", "status": "pending", "blockedBy": [1], "metadata": {"files": ["src/z.ts"], "modelTier": "mechanical"}},
+    {"id": 1, "subject": "Standard, blocks the solo", "status": "pending", "metadata": {"files": ["src/p.ts"], "modelTier": "standard"}},
+    {"id": 2, "subject": "Standard, shares a file with 1, blocked by the other mechanical pair", "status": "pending", "blockedBy": [3], "metadata": {"files": ["src/p.ts"], "modelTier": "standard"}},
+    {"id": 3, "subject": "Mechanical, blocks the bridge", "status": "pending", "metadata": {"files": ["src/g.ts"], "modelTier": "mechanical"}},
+    {"id": 4, "subject": "Mechanical, shares a file with 3", "status": "pending", "metadata": {"files": ["src/g.ts"], "modelTier": "mechanical"}}
+  ],
+  "lastUpdated": "2026-08-13T00:00:00Z"
+}

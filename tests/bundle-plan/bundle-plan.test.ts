@@ -91,12 +91,15 @@ test("CRITICAL 1: refuses to write the manifest over its own input", async () =>
   expect(after).toBe(before); // input must be byte-identical — never overwritten
 });
 
-test("CRITICAL 2: packing a same-tier pair across an intermediate-tier dependency does not manufacture a cycle", async () => {
+test("a three-tier dependency chain bundles without a false cycle", async () => {
   // A(mechanical) -> B(standard) -> C(mechanical), zero file/edge coupling
-  // between A and C directly. Old code packed A+C (same tier, both small)
-  // ignoring the transitive A->B->C precedence path, producing a bundle
-  // that had to both precede and follow B's bundle — a fake cycle on a
-  // perfectly valid plan.
+  // between A and C directly. This fixture originally caught a Critical
+  // defect in a since-removed singleton-packing pass, which packed A+C
+  // (same tier, both small) ignoring the transitive A->B->C precedence
+  // path, producing a bundle that had to both precede and follow B's
+  // bundle — a fake cycle on a perfectly valid plan. Packing is gone now
+  // (see CRITICAL-2-ROUND-3 below for why), so this is a plain "a valid
+  // chain bundles and orders correctly" regression.
   const r = await run("tier-chain.tasks.json");
   expect(r.code).toBe(0);
   const m = JSON.parse(r.stdout);
@@ -163,4 +166,65 @@ test("MINOR: a null json:metadata fence falls back to the standard missing-tier 
   expect(r.stderr).toContain("modelTier");
   expect(r.stderr).toContain("task 0");
   expect(r.stderr).not.toContain("TypeError");
+});
+
+// --- fix round 3 regressions ---
+//
+// The re-review proved the round-2 CRITICAL-2 fix (a task-level-only
+// reachability check) was still unsound: bundle-level precedence is a
+// strict superset of task-level precedence, because a merged bundle can
+// itself act as a bridge with no direct task-level edge spanning it. Two
+// counterexamples were reproduced, both exiting 1 ("dependency cycle") on
+// a valid DAG against the round-2 code. The fix is the escape hatch the
+// round-2 brief always allowed: drop singleton packing entirely. These two
+// fixtures are what packing would previously have miscategorised as safe
+// to merge; without packing they must bundle cleanly at exit 0.
+
+test("independent solo task is not bridged into a cycle by a coupled standard pair (forward edges)", async () => {
+  // 0(mechanical) -/-> {3,4}(mechanical) have no coupling and no task-level
+  // path between them. But {1,2}(standard) is a real coupled pair (shared
+  // file) that 0 points into (0 blocks 1) and that itself points into
+  // {3,4} (2 blocks 3) — a bundle-level bridge invisible to a task-level
+  // check. Packing used to merge 0 with {3,4} here, which then had to both
+  // precede and follow {1,2}. With packing removed, 0 stays its own bundle.
+  const r = await run("bridged-pair-forward.tasks.json");
+  expect(r.code).toBe(0);
+  const m = JSON.parse(r.stdout);
+  expect(m.bundles.length).toBe(3); // {0}, {1,2}, {3,4}
+  const pos = new Map(m.bundles.map((b: any, i: number) => [b.id, i]));
+  for (const b of m.bundles)
+    for (const dep of b.blockedByBundles)
+      expect(pos.get(dep)).toBeLessThan(pos.get(b.id));
+});
+
+test("independent solo task is not bridged into a cycle by a coupled standard pair (reverse edges)", async () => {
+  // Mirror of the forward case with both blockedBy edges reversed: {3,4}
+  // precedes {1,2} precedes 0. Same bridge structure, opposite direction.
+  const r = await run("bridged-pair-reverse.tasks.json");
+  expect(r.code).toBe(0);
+  const m = JSON.parse(r.stdout);
+  expect(m.bundles.length).toBe(3); // {3,4}, {1,2}, {0}
+  const pos = new Map(m.bundles.map((b: any, i: number) => [b.id, i]));
+  for (const b of m.bundles)
+    for (const dep of b.blockedByBundles)
+      expect(pos.get(dep)).toBeLessThan(pos.get(b.id));
+});
+
+test("MINOR: the restructure hint is omitted when the breach has no shared file to restructure", async () => {
+  const r = await run("oversized-files.tasks.json"); // breaches on a blockedBy edge, zero shared files
+  expect(r.code).toBe(1);
+  expect(r.stderr).not.toContain("Restructure the plan");
+});
+
+test("MINOR: the restructure hint is present when the breach does have a shared file", async () => {
+  const r = await run("oversized.tasks.json"); // breaches on a shared file
+  expect(r.code).toBe(1);
+  expect(r.stderr).toContain("Restructure the plan");
+});
+
+test("MINOR: a repeated cap flag honours its last occurrence", async () => {
+  // oversized.tasks.json is a 6-task bundle; --max-tasks 3 would still
+  // reject it, but the later --max-tasks 99 must win.
+  const r = await run("oversized.tasks.json", "--max-tasks", "3", "--max-tasks", "99");
+  expect(r.code).toBe(0);
 });

@@ -30,6 +30,7 @@ digraph process {
     "Show manifest, commit it with the plan" [shape=box];
     "Port plan to Beads (epic + children + links)" [shape=box];
     "Read model-routing.json + manifest, build ctx" [shape=box];
+    "Rewrite manifest taskIds to bead ids" [shape=box style=filled fillcolor=lightyellow];
     "Claim member beads" [shape=box];
     "Launch Workflow tool" [shape=box];
     "Close completed beads, report epic id" [shape=box];
@@ -44,7 +45,8 @@ digraph process {
     "Exit 0?" -> "Show manifest, commit it with the plan" [label="yes"];
     "Show manifest, commit it with the plan" -> "Port plan to Beads (epic + children + links)";
     "Port plan to Beads (epic + children + links)" -> "Read model-routing.json + manifest, build ctx";
-    "Read model-routing.json + manifest, build ctx" -> "Claim member beads";
+    "Read model-routing.json + manifest, build ctx" -> "Rewrite manifest taskIds to bead ids";
+    "Rewrite manifest taskIds to bead ids" -> "Claim member beads";
     "Claim member beads" -> "Launch Workflow tool";
     "Launch Workflow tool" -> "Close completed beads, report epic id";
     "Close completed beads, report epic id" -> "Suggest /complete-epic <epic-id>";
@@ -80,8 +82,8 @@ command -v bd && test -d .beads && echo BEADS_OK
 ```
 
 Both must hold. Beads is the durable record for the whole run: the workflow's implementer prompts
-tell agents to run `bd show <id>` for their task detail, and the epic id is embedded in every commit
-message the run produces.
+tell agents to run `bd show <id>` for their task detail, Implement-phase commits are prefixed with
+the task id, and the fix, test and refactor commits are prefixed with the epic id.
 
 If either check fails, ask — this is the only question this skill asks:
 
@@ -122,18 +124,18 @@ character, in a code block — and hand the decision back to them. Do NOT partit
 yourself, do NOT edit the manifest by hand, do NOT re-run with inflated `--max-*` values to make the
 message go away.
 
-The message is not an obstacle; it is the finding. It names the exact tasks, the exact shared files
-forcing the merge, and the restructuring that fixes it. A non-zero exit means the *plan* has a
-problem — usually several tasks writing one file that ought to be touched once, or a task whose
-`json:metadata` fence carries no `modelTier`. Fixing the plan is your human partner's call, not
-yours.
+The message is not an obstacle; it is the finding. On exit 1 it names the exact tasks, the exact
+shared files forcing the merge, and the restructuring that fixes it — a *plan* problem, usually
+several tasks writing one file that ought to be touched once, or a task whose `json:metadata` fence
+carries no `modelTier`. Fixing the plan is your human partner's call, not yours. Exit 2 is a
+different animal (see the table): read the message before deciding whose problem it is.
 </HARD-GATE>
 
 | Exit | Meaning | What to do |
 |---|---|---|
 | 0 | Manifest written | Continue to Step 4 |
 | 1 | Plan content is wrong — missing/invalid `modelTier`, malformed metadata fence, bundle over cap, dependency cycle | STOP, surface stderr verbatim, fix the plan (with consent) and re-run |
-| 2 | Invocation is wrong — no input path, input not ending in `.tasks.json`, bad `--max-*` value | STOP, fix your own command, re-run |
+| 2 | The invocation or the input file is wrong — no input path, input not ending in `.tasks.json`, bad `--max-*` value, **or the `.tasks.json` is missing / not valid JSON** | STOP and read the message. A bad flag or path is yours to fix and re-run. A missing or corrupt task file is not — say so and hand it back; `writing-plans` should have written it. |
 
 Valid tiers are `mechanical`, `standard`, `frontier`. The bundler refuses to default a missing one,
 and so must you: a silent default here is an expensive silent default at dispatch time.
@@ -164,25 +166,43 @@ Create the epic:
 EPIC=$(bd create "<plan title>" -t epic -p 1 --external-ref "docs/superpowers/plans/<name>.md" --json | jq -r '.id')
 ```
 
-Then one child per task in `.tasks.json`, in plan order:
+Then one child per task in `.tasks.json`, in plan order. Write each task's body to a temp file
+first — descriptions contain backticks, quotes and newlines, and quoting them inline is where this
+step breaks:
 
 ```bash
+# $BODY and $ACC are paths to temp files holding the task's Goal/Files/Steps text and its
+# Acceptance Criteria block. There is no --acceptance-file, hence the cat.
 bd create "<task subject>" --parent "$EPIC" -t task -p 2 \
-   -d "<Goal + Files + Steps>" --acceptance "<AC block>" \
-   --external-ref "docs/superpowers/plans/<name>.md" --json | jq -r '.id'
+   --body-file "$BODY" --acceptance "$(cat "$ACC")" \
+   --external-ref "docs/superpowers/plans/<name>.md#task-<planTaskId>" --json | jq -r '.id'
 ```
 
-- `-d` gets the task's full **Goal / Files / Steps** body, not a summary. The implementing agent
-  reads this via `bd show` and nothing else — a one-line description makes it improvise.
+- The body is the task's full **Goal / Files / Steps**, not a summary. The implementing agent reads
+  this via `bd show` and nothing else — a one-line description makes it improvise. `-d "<text>"` is
+  the shortcut for a genuinely short, quote-free body; `--body-file` (or `--stdin`) is the default.
 - `--acceptance` gets the Acceptance Criteria block.
 - Priority: `-p 2` for every child unless the plan says otherwise. Execution order comes from the
   manifest and the dependency links, never from priority.
-- Descriptions contain backticks, quotes and newlines. Quoting them into `-d` is where this step
-  breaks. Write the body to a temp file and pass `--body-file <tmp>` instead.
 
-**Record the id map as you go: plan task id → bead id.** `.tasks.json` ids are integers (`10`, `11`,
-…); bead ids look like `myproj-9rm.1`. Step 6 depends on this map and you cannot reconstruct it
-later without guessing.
+<HARD-GATE>
+**The `#task-<planTaskId>` fragment on `--external-ref` is mandatory, not decoration.** It is the
+plan-task-id → bead-id map, written into durable storage at the moment the pairing is known.
+`.tasks.json` ids are integers (`10`, `11`, …); bead ids look like `myproj-9rm.1`. Step 6b cannot
+run without this map, and there is no other way to recover it: creation order is not queryable, and
+a coordinator that batches the creates, compacts, or resumes after an interruption has nothing left
+to correlate. Do not keep the map only in your head or only in a scratch note.
+</HARD-GATE>
+
+Reconstruct the map at any later point — always do this rather than trusting memory:
+
+```bash
+bd list --parent "$EPIC" --json | jq -r '.[] | [.external_ref, .id, .title] | @tsv'
+# docs/superpowers/plans/<name>.md#task-13   myproj-9rm.1   Task 4: The orchestrating-execution skill
+```
+
+The fragment after `#task-` is the `.tasks.json` id; the second column is the bead id. That is
+exactly the substitution Step 6b performs.
 
 Replay each task's `blockedBy`:
 
@@ -220,16 +240,28 @@ hand-written `routing` object. Tell your human partner that orchestrated executi
 and nowhere else — not in this skill, not in the script, not in your `args`.
 </HARD-GATE>
 
-Pass the parsed object through as `routing`, verbatim, including any extra keys (`effort`,
-`sonnetEffort`, `enforceEffort`). The script reads only the three tier keys and ignores the rest.
+Pass the parsed object through as `routing`, verbatim, including any extra keys it carries (`effort`,
+`enforceEffort`, and any model-specific effort overrides). Copy them; do not read them aloud, do not
+transcribe a key whose name is a model name. The script reads only the three tier keys, ignores the
+rest, and is the only thing that ever turns a tier into a model.
 `validateArgs` resolves every bundle's tier against this object up front, so a mapping missing a
 tier that the plan uses fails before any spend.
 
 ### 6b. Rewrite the manifest's task ids to bead ids
 
 The manifest's `taskIds` are `.tasks.json` integers. The workflow's implementer prompt says *"run
-`bd show <id>`"* with exactly those values. Substitute the bead ids from your Step 5 map before
-passing the bundles through, or every implementer's first command fails.
+`bd show <id>`"* with exactly those values. Substitute bead ids before passing the bundles through,
+or every implementer's first command fails.
+
+Rebuild the map from Beads rather than from memory — the external refs you wrote in Step 5 are the
+source of truth:
+
+```bash
+bd list --parent "$EPIC" --json | jq -r '.[] | [(.external_ref | split("#task-")[1]), .id] | @tsv'
+```
+
+Then replace each integer in every bundle's `taskIds` with its bead id. If any integer in the
+manifest has no row in that output, STOP — a task failed to port and the run would silently skip it.
 
 Change nothing else about the bundles array:
 
@@ -265,9 +297,12 @@ bd update <bead-id> --claim
 ```
 
 for every bead named in the manifest, immediately before launching. `--claim` is atomic and
-idempotent, so re-running a partially-completed orchestration is safe. When resuming, guard
-transitions with `--if-status <expected>`; it writes nothing and exits 13 on a mismatch, so a resume
-cannot double-apply.
+idempotent — claiming an already-claimed bead exits 0 and changes nothing — so re-running a
+partially-completed orchestration is safe.
+
+`--claim` takes no guard: `bd update --help` states `--if-status` "requires a field update; cannot
+combine with `--claim`". Do not write `bd update <id> --claim --if-status open`; it errors.
+Guarded transitions belong in Step 7, where real status changes happen.
 
 ### 6e. Call the Workflow tool
 
@@ -298,12 +333,48 @@ malformed-input bug on your side, not a plan problem — fix the `args` and rela
 The script announces its phases (Implement → Review → Fixes → Test → Refactor → Test) and returns
 `{epicId, mode, bundles, findings, greenAfterImpl, greenAfterRefactor, notes}`.
 
-**Untracked mode.** With no Beads, there are still hard requirements: `epicId` must be a non-empty
-string — use the plan slug, e.g. `"untracked-2026-08-13-my-feature"` — and `taskIds` keep their
-`.tasks.json` integers. Add to `ctx`: *"There is no Beads tracker in this repo. Ignore any
-instruction to run `bd show` or `bd close`; read each task's full detail from
-`docs/superpowers/plans/<name>.md`, where tasks are the `### Task N:` sections."* Skip Steps 5, 6b,
-6d and the bead half of Step 7.
+### 6f. Untracked mode — degraded, not equivalent
+
+**Beads is strongly preferred.** Untracked mode is a fallback with real, unavoidable weaknesses:
+`orchestrate.js` hardcodes `bd show <id>` into every implementer prompt, and `ctx` is *prepended*
+(`orchestrate.js:133`), so your "there is no tracker" clause sits in the weaker position — earlier
+and more general — against a later, more specific instruction. Agents will sometimes try `bd show`
+anyway. There is also no durable record of what completed, and `/complete-epic` is unavailable
+afterwards. If your human partner is wavering, say all of that and recommend `bd init`.
+
+If you are running untracked anyway:
+
+<HARD-GATE>
+**Two unrelated id spaces.** `.tasks.json` ids and plan-document `### Task N:` headings are
+different numbering schemes and they do not line up. In this repo the task file uses ids 10–15 while
+the plan headings run `### Task 1:` to `### Task 6:`. Passing the `.tasks.json` integers straight
+through renders "Implement beads tasks 13, 14" and sends the agent hunting for `### Task 13:` in a
+six-task plan. Every untracked implementer fails on its first action.
+</HARD-GATE>
+
+Each task's `subject` carries the plan-document number literally — `"Task 4: The
+orchestrating-execution skill"`. Use it:
+
+1. For each `.tasks.json` task, parse the leading `Task <N>:` from its `subject`. That `<N>` is the
+   plan-document number.
+2. Rewrite every bundle's `taskIds` to those plan numbers. (If any subject has no `Task <N>:`
+   prefix, put the subject *text* in `taskIds` instead — matching by text always works, and a wrong
+   number never does.)
+3. `epicId` must still be a non-empty string: use the plan slug, e.g.
+   `"untracked-2026-08-13-my-feature"`.
+4. Add to `ctx`, and put a task index in it so text matching is possible even when the number is
+   misread:
+
+```
+There is no Beads tracker in this repo. `bd` is unavailable — if any instruction below tells you to
+run `bd show`, `bd update` or `bd close`, ignore it; those commands do not exist here.
+Read your task's full detail from docs/superpowers/plans/<name>.md. Locate it by matching the
+heading TEXT below, not by any number you are handed:
+  Task 4 → "### Task 4: The orchestrating-execution skill"
+  Task 5 → "### Task 5: Wire the handoff"
+```
+
+Skip Steps 5, 6b, 6d, and the bead and `/complete-epic` halves of Step 7.
 
 ## Step 7: On completion
 
@@ -311,11 +382,18 @@ instruction to run `bd show` or `bd close`; read each task's full detail from
    rounds and stopped with the branch intact — report the failing tests, and do not close the beads
    for work that is not green.
 2. **Close the beads for completed bundles** — `bd close <id>` — from this skill and nowhere else.
-   Leave anything unfinished `in_progress` so a resume can pick it up.
+   Leave anything unfinished `in_progress` so a resume can pick it up. When you are unsure whether a
+   bead is still in the state you left it in — a resumed run, a workflow that died mid-phase — guard
+   the transition: `bd update <id> --if-status in_progress --status closed` writes nothing and exits
+   **13** on a mismatch, so it cannot double-apply. (`--if-status` needs a field update and cannot be
+   combined with `--claim`.)
 3. **Report the epic id** and a short outcome: bundles run, findings count, test state.
 4. **Suggest `/complete-epic <epic-id>`** and stop there. That command already owns evidence
    gathering, follow-up filing, the retrospective and epic closure. Do not write a completion
    report, do not file follow-ups, do not close the epic yourself.
+
+   **Untracked runs skip steps 2 and 4 entirely** — there is no epic to complete and nothing to
+   close. Report the outcome, name the plan document, and stop.
 
 ## Anti-Patterns
 
@@ -329,6 +407,8 @@ instruction to run `bd show` or `bd close`; read each task's full detail from
 | Writing a model name into `args`, the skill, or a prompt | Tiers only. `model-routing.json` is the single place a tier becomes a model. Model lineups change; plans and skills survive. |
 | Sorting the bundles array by id before launching | The array is already topologically sorted and its ids are deliberately not in order. Sorting breaks the dependency contract and `validateArgs` rejects it. |
 | Passing the manifest's integer `taskIds` straight through when Beads is in use | Agents are told to run `bd show <id>`. Integers are not bead ids; every implementer's first command fails. |
+| Keeping the plan-id → bead-id map in your head instead of the external refs | Creation order is not queryable and your context does not survive compaction. Write `#task-<planTaskId>` into `--external-ref` and rebuild the map from `bd list` every time. |
+| Passing `.tasks.json` integers as plan-document task numbers in untracked mode | Two unrelated id spaces. Task-file id 13 is plan heading `### Task 4:`. The number comes from the subject's `Task <N>:` prefix, or you pass the subject text. |
 | Implementing a task yourself "since it's small" | You are the coordinator. Work happens inside the workflow, where routing is enforced and each dispatch is logged. Your edits are neither. |
 | Writing your own completion report at the end | `/complete-epic` owns that, with evidence. Duplicating it produces two accounts of the same run that will disagree. |
 
@@ -338,5 +418,8 @@ instruction to run `bd show` or `bd close`; read each task's full detail from
 - You are about to summarise, paraphrase or truncate a `bundle-plan.mjs` error.
 - You are typing a model name anywhere.
 - You are about to run `bd link` without having said "A is blocked by B" to yourself first.
+- You are about to run `bd create` for a child without `#task-<planTaskId>` on its `--external-ref`.
+- You are recalling a bead id from memory instead of reading it back out of `bd list`.
+- You are combining `--claim` with `--if-status`.
 - Your `ctx` string does not end with `Do NOT run bd close.`
 - You are about to call the Workflow tool with a string where an object belongs.

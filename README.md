@@ -80,11 +80,13 @@ record, and `bd show`-shaped prompts still get sent to agents that have no `bd`)
 If the routing file from the previous section is missing entirely (neither project nor user path),
 the skill stops rather than guessing which model a tier means.
 
-### The `/complete-epic` dependency
+### Closing an epic
 
 On completion, `orchestrating-execution` suggests running `/complete-epic <epic-id>`. That command
-does **not** ship with this plugin — it's a user-level slash command that lives in
-`~/.claude/commands/`, so a fresh install of this fork won't have it until you add it yourself.
+ships with this plugin (`commands/complete-epic.md`). It builds an evidence-backed completion
+report — every figure taken from a command actually run, never from memory — files follow-up work
+as real beads rather than prose recommendations, captures durable learnings, and only then closes
+the epic.
 
 ---
 

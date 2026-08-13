@@ -59,11 +59,14 @@ lists a task before the one that blocks it.
 ### Model tiers
 
 Tasks in `writing-plans` carry a `modelTier` of `mechanical`, `standard`, or `frontier` (see
-[The tiers](#the-tiers) above); `orchestrate.js` never sees or names a concrete model — it reads
-`docs/superpowers/model-routing.json` and turns each bundle's tier into whatever model that
-project's file maps it to. This project's own routing file maps `mechanical → sonnet`,
-`standard → opus`, `frontier → fable`, but that mapping is this project's configuration, not
-built-in behavior — a different project's file can point the same three tiers anywhere.
+[The tiers](#the-tiers) above). `orchestrate.js` itself never sees or names a concrete model — it's
+a Workflow-tool script with no filesystem access, so it only ever evaluates a tier against a
+`routing` object it's handed in `args`. The `orchestrating-execution` skill is what reads
+`docs/superpowers/model-routing.json` (project path first, falling back to
+`~/.claude/superpowers/model-routing.json`) and passes the parsed object through. A routing file
+might map `mechanical → sonnet`, `standard → opus`, `frontier → fable` — as an *example*, not this
+repo's actual config, since no such file is checked in here; `/onboard` writes the real one for
+your project.
 
 ### Tracking: Beads, not Backlog.md
 
@@ -74,8 +77,8 @@ removed in favor of `bd`. If `bd` isn't on `PATH` or `.beads/` doesn't exist,
 the handoff asks whether to run `bd init`, continue untracked (a degraded path — no durable
 record, and `bd show`-shaped prompts still get sent to agents that have no `bd`), or cancel.
 
-Routing also needs `docs/superpowers/model-routing.json` to exist; `/onboard` writes it. Without
-it, the skill stops rather than guessing which model a tier means.
+If the routing file from the previous section is missing entirely (neither project nor user path),
+the skill stops rather than guessing which model a tier means.
 
 ### The `/complete-epic` dependency
 

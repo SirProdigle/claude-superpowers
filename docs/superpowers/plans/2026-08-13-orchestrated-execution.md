@@ -960,3 +960,18 @@ Expected: 3 or more
 git add README.md
 git commit -m "docs: document Orchestrated execution in the README"
 ```
+
+---
+
+## Implementation deviations (recorded during execution)
+
+**Task 2 — the small-singleton packing pass was removed.** The bundling rule above lists
+"both tasks being small" as a merge signal. In review it produced two Critical defects: merging
+zero-coupling same-tier tasks fabricates dependency cycles in the bundle graph, and the obvious
+guard (task-level `blockedBy` reachability) is unsound because bundle-level precedence is a strict
+superset of task-level precedence. Bundles now merge only on real coupling — shared files or a
+direct `blockedBy` edge.
+
+**Task 2 — `taskIds` is sorted topologically, not numerically.** The code in Task 2 Step 4 sorts
+numerically, which can list a dependent before its blocker. Ruled by the human during execution:
+correctness governs. Sorted by the intra-bundle `blockedBy` graph, tie-breaking by ascending id.

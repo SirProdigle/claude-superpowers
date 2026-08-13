@@ -4,13 +4,13 @@
     {
       "id": 10,
       "subject": "Task 1: Remove the Backlog.md epic layer",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Delete the Backlog.md skills, hooks, templates and fixtures, leaving Beads as the only tracker.\n\n**Files:**\n- Delete: `skills/adopting-backlog/`, `skills/tracking-with-backlog/`, `skills/planning-an-epic/`, `skills/linking-a-plan/`, `skills/converting-a-design/`\n- Delete: `skills/shared/backlog-cli-cheatsheet.md`, `skills/shared/link-convention.md`, `skills/shared/status-mapping.md`\n- Delete: `hooks/sync-backlog-status.ts`, `hooks/sync-backlog-status.test.ts`, `hooks/remind-backlog-reconcile.ts`, `hooks/remind-backlog-reconcile.test.ts`\n- Delete: `templates/`, `tests/hook-fixtures/`\n- Modify: `hooks/hooks.json` \u2014 remove the `PostToolUse` block\n- Modify: `README.md` \u2014 remove the \"What this fork adds beyond upstream\" epic-layer table\n\n**Acceptance Criteria:**\n- [ ] `git grep -il backlog -- skills hooks templates` returns nothing\n- [ ] `hooks/hooks.json` contains only `SessionStart` and `PreToolUse`\n- [ ] `claude plugin validate .` passes\n- [ ] No file in the repo references a deleted path\n\n**Verify:** `claude plugin validate . && ! git grep -qi backlog -- skills hooks && echo OK`\n\n```json:metadata\n{\"files\": [\"skills/adopting-backlog\", \"skills/tracking-with-backlog\", \"skills/planning-an-epic\", \"skills/linking-a-plan\", \"skills/converting-a-design\", \"skills/shared/backlog-cli-cheatsheet.md\", \"skills/shared/link-convention.md\", \"skills/shared/status-mapping.md\", \"hooks/sync-backlog-status.ts\", \"hooks/remind-backlog-reconcile.ts\", \"hooks/hooks.json\", \"README.md\"], \"verifyCommand\": \"claude plugin validate . && ! git grep -qi backlog -- skills hooks && echo OK\", \"acceptanceCriteria\": [\"`git grep -il backlog -- skills hooks templates` returns nothing\", \"`hooks/hooks.json` contains only `SessionStart` and `PreToolUse`\", \"`claude plugin validate .` passes\", \"No file in the repo references a deleted path\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 11,
       "subject": "Task 2: Deterministic bundler script",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** `scripts/bundle-plan.mjs` reads a `.tasks.json` and writes a `.bundles.json` manifest, partitioning by tier and merging on coupling.\n\n**Files:**\n- Create: `scripts/bundle-plan.mjs`\n- Create: `tests/bundle-plan/bundle-plan.test.ts`\n- Create: `tests/bundle-plan/fixtures/simple.tasks.json`\n- Create: `tests/bundle-plan/fixtures/oversized.tasks.json`\n- Create: `tests/bundle-plan/fixtures/missing-tier.tasks.json`\n\n**Acceptance Criteria:**\n- [ ] Tasks of different `modelTier` are never placed in the same bundle\n- [ ] Tasks sharing a file, or joined by a direct `blockedBy` edge, land in the same bundle\n- [ ] Bundles are emitted in an order where every bundle's dependencies precede it\n- [ ] A task with no `modelTier` causes exit code 1 and a message naming the task id\n- [ ] A bundle exceeding 5 tasks or 15 files causes exit code 1 naming the tasks and the shared files\n- [ ] `--max-tasks` / `--max-files` override the caps\n\n**Verify:** `bun test tests/bundle-plan/` \u2192 all pass\n\n```json:metadata\n{\"files\": [\"scripts/bundle-plan.mjs\", \"tests/bundle-plan/bundle-plan.test.ts\", \"tests/bundle-plan/fixtures/simple.tasks.json\", \"tests/bundle-plan/fixtures/oversized.tasks.json\", \"tests/bundle-plan/fixtures/missing-tier.tasks.json\"], \"verifyCommand\": \"bun test tests/bundle-plan/\", \"acceptanceCriteria\": [\"Tasks of different `modelTier` are never placed in the same bundle\", \"Tasks sharing a file, or joined by a direct `blockedBy` edge, land in the same bundle\", \"Bundles are emitted in an order where every bundle's dependencies precede it\", \"A task with no `modelTier` causes exit code 1 and a message naming the task id\", \"A bundle exceeding 5 tasks or 15 files causes exit code 1 naming the tasks and the shared files\", \"`--max-tasks` / `--max-files` override the caps\"], \"modelTier\": \"standard\"}\n```"
     },
     {
@@ -49,5 +49,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-08-13T03:00:00Z"
+  "lastUpdated": "2026-08-13T04:20:00Z"
 }

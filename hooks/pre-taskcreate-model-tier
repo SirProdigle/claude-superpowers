@@ -95,7 +95,7 @@ if ! printf '%s' "$DESCRIPTION" | grep -q '```json:metadata'; then
         echo "This project has opted in to subagent model routing, and the TaskCreate"
         echo "for '$SUBJECT' is plan-shaped ($PLAN_SHAPED) but its description carries"
         echo "no \`\`\`json:metadata fence. Plan tasks MUST follow the full structured"
-        echo "body (superpowers-extended-cc:writing-plans → Native Task Integration):"
+        echo "body (claude-superpowers:writing-plans → Native Task Integration):"
         echo ""
         echo "  **Goal:** / **Files:** / **Acceptance Criteria:** / **Verify:** sections,"
         echo "  ending with a json:metadata fence:"

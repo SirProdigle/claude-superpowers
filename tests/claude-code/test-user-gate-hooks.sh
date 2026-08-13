@@ -197,7 +197,7 @@ echo ""
 echo "Test E: regression — superpowers-active no longer short-circuits the hook"
 # Transcript that contains the word "superpowers" but has no assessment. Pre-rewrite this skipped; now it should block.
 cat > "$WORK/superpowers-silent.jsonl" <<'EOF'
-{"type":"user","message":{"content":"Using superpowers-extended-cc:subagent-driven-development to execute"}}
+{"type":"user","message":{"content":"Using claude-superpowers:subagent-driven-development to execute"}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TaskCreate","input":{"subject":"Task in superpowers run","description":"**Goal:** do stuff."}}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TaskUpdate","input":{"taskId":"1","status":"in_progress"}}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}

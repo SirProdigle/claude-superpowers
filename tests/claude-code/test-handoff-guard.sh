@@ -71,14 +71,14 @@ EOF
 
 # Transcript: writing-plans invoked via Skill tool_use + TaskCreate after.
 cat > "$WORK/armed-via-skill.jsonl" <<'EOF'
-{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"superpowers-extended-cc:writing-plans"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-superpowers:writing-plans"}}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TaskCreate","input":{"subject":"Task 1","description":"**Goal:** do thing\n```json:metadata\n{\"modelTier\":\"mechanical\"}\n```"}}]}}
 EOF
 
 # Transcript: writing-plans invoked via user message (slash command injection) — content as string.
 # This is the live failure mode from session 2013ea56.
 cat > "$WORK/armed-via-user-string.jsonl" <<'EOF'
-{"type":"user","message":{"content":"superpowers-extended-cc:writing-plans skill"}}
+{"type":"user","message":{"content":"claude-superpowers:writing-plans skill"}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TaskCreate","input":{"subject":"Task 1","description":"**Goal:** do thing\n```json:metadata\n{\"modelTier\":\"mechanical\"}\n```"}}]}}
 EOF
 
@@ -89,7 +89,7 @@ EOF
 python3 -c "
 import json, sys
 lines = [
-    {\"type\": \"user\", \"message\": {\"content\": [{\"type\": \"text\", \"text\": \"superpowers-extended-cc:writing-plans skill\"}]}},
+    {\"type\": \"user\", \"message\": {\"content\": [{\"type\": \"text\", \"text\": \"claude-superpowers:writing-plans skill\"}]}},
     {\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"TaskCreate\", \"input\": {\"subject\": \"Task 1\", \"description\": \"Goal: do thing\"}}]}}
 ]
 with open(sys.argv[1], 'w') as f:
@@ -99,16 +99,16 @@ with open(sys.argv[1], 'w') as f:
 
 # Transcript: armed, then disarmed by later subagent-driven-development Skill invocation.
 cat > "$WORK/disarmed-by-execution.jsonl" <<'EOF'
-{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"superpowers-extended-cc:writing-plans"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-superpowers:writing-plans"}}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TaskCreate","input":{"subject":"Task 1","description":"goal"}}]}}
-{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"superpowers-extended-cc:subagent-driven-development"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-superpowers:subagent-driven-development"}}]}}
 EOF
 
 # Transcript: armed, then disarmed by a prior compliant AskUserQuestion.
 python3 -c "
 import json, sys
 lines = [
-    {\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"Skill\", \"input\": {\"skill\": \"superpowers-extended-cc:writing-plans\"}}]}},
+    {\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"Skill\", \"input\": {\"skill\": \"claude-superpowers:writing-plans\"}}]}},
     {\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"TaskCreate\", \"input\": {\"subject\": \"Task 1\", \"description\": \"goal\"}}]}},
     {\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"AskUserQuestion\", \"input\": {
         \"questions\": [{
@@ -128,7 +128,7 @@ with open(sys.argv[1], 'w') as f:
 
 # Transcript: writing-plans arm but no TaskCreate after it.
 cat > "$WORK/arm-no-taskcreate.jsonl" <<'EOF'
-{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"superpowers-extended-cc:writing-plans"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-superpowers:writing-plans"}}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}
 EOF
 
@@ -381,10 +381,10 @@ echo "Test 19: re-arm for a second plan — stale TaskCreate from plan 1 must NO
 # creates any tasks, a clarifying AskUserQuestion is legitimate — the
 # TaskCreate from plan 1 must not count as "tasks created after arm".
 cat > "$WORK/rearm-second-plan.jsonl" <<'EOF'
-{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"superpowers-extended-cc:writing-plans"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-superpowers:writing-plans"}}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TaskCreate","input":{"subject":"Task 1","description":"goal"}}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"AskUserQuestion","input":{"questions":[{"question":"Plan complete. How would you like to execute it?","options":[{"label":"Subagent-Driven (this session)"},{"label":"Parallel Session (separate)"}]}]}}]}}
-{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"superpowers-extended-cc:writing-plans"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-superpowers:writing-plans"}}]}}
 EOF
 INPUT=$(make_wrong_options_input "$WORK/rearm-second-plan.jsonl")
 rc=$(run_hook "$INPUT")

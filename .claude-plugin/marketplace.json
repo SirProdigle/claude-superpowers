@@ -1,14 +1,14 @@
 {
-  "name": "superpowers-extended-cc-marketplace",
-  "description": "Marketplace for Superpowers Extended CC - Claude Code-specific enhancements",
+  "name": "claude-superpowers",
+  "description": "Personal fork of pcvelz/superpowers (Claude Code Superpowers), rebranded as claude-superpowers",
   "owner": {
     "name": "pcvelz",
     "email": "pcvelz@users.noreply.github.com"
   },
   "plugins": [
     {
-      "name": "superpowers-extended-cc",
-      "description": "Claude Code-specific fork of Superpowers with native task management and CC-specific enhancements",
+      "name": "claude-superpowers",
+      "description": "Claude Code Superpowers \u2014 brainstorm, plan, TDD, gates and subagent-driven development. Fork of pcvelz/superpowers.",
       "version": "6.4.1-dev",
       "source": "./",
       "author": {

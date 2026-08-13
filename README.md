@@ -1,4 +1,26 @@
-# Superpowers Extended for Claude Code
+# claude-superpowers
+
+A personal fork of [pcvelz/superpowers](https://github.com/pcvelz/superpowers) (itself a
+Claude Code-focused fork of [obra/superpowers](https://github.com/obra/superpowers)), renamed
+so it installs alongside the originals rather than shadowing them.
+
+**Lineage:** `obra/superpowers` → `pcvelz/superpowers` → this fork. MIT throughout; all
+upstream credit belongs to Jesse Vincent and the pcvelz maintainer.
+
+**Local changes** live on top of upstream and are re-applied after each merge via
+[`scripts/rebrand.sh`](scripts/rebrand.sh). To pull upstream in:
+
+```bash
+git fetch upstream && git merge upstream/main
+./scripts/rebrand.sh
+git commit -am "chore: re-apply rebrand after upstream merge"
+```
+
+`upstream` is pcvelz; `root` is obra. Both are fetch-only.
+
+---
+
+## Upstream README
 
 A community-maintained fork of [obra/superpowers](https://github.com/obra/superpowers) specifically for Claude Code users.
 
@@ -65,7 +87,7 @@ This fork integrates Claude Code-native features into the Superpowers workflow.
 /plugin marketplace add pcvelz/superpowers
 
 # Install plugin
-/plugin install superpowers-extended-cc@superpowers-extended-cc-marketplace
+/plugin install claude-superpowers@claude-superpowers
 ```
 
 ### Option 2: Direct URL
@@ -80,17 +102,17 @@ Third-party marketplaces don't auto-update by default — installs stay frozen o
 
 1. Run `/plugin`
 2. Open the **Marketplaces** tab
-3. Toggle **Enable auto-update** on `superpowers-extended-cc-marketplace`
+3. Toggle **Enable auto-update** on `claude-superpowers`
 
 Or refresh manually any time:
 
 ```
-/plugin marketplace update superpowers-extended-cc-marketplace
+/plugin marketplace update claude-superpowers
 ```
 
 ### Verify Installation
 
-Run `/superpowers-extended-cc:onboard` for a guided walkthrough of the optional features (model routing, user-gate enforcement, commit strategy). One scope choice governs every write; manual setup is documented below.
+Run `/claude-superpowers:onboard` for a guided walkthrough of the optional features (model routing, user-gate enforcement, commit strategy). One scope choice governs every write; manual setup is documented below.
 
 ## The Basic Workflow
 
@@ -226,7 +248,7 @@ Tiers are abstract on purpose — plans survive model generations; the routing f
 
 ### Setup
 
-Prefer a guided setup? Run `/superpowers-extended-cc:onboard` — it asks one multiple-choice question per optional feature and writes the files for you. Manual setup below achieves exactly the same.
+Prefer a guided setup? Run `/claude-superpowers:onboard` — it asks one multiple-choice question per optional feature and writes the files for you. Manual setup below achieves exactly the same.
 
 Create `docs/superpowers/model-routing.json` in your project:
 
@@ -268,7 +290,7 @@ When `at-end` is set, a notice injected at session start instructs the agent to:
 
 Setup notes:
 
-- Prefer a guided setup? Run `/superpowers-extended-cc:onboard` — it covers this feature alongside the other optional flows.
+- Prefer a guided setup? Run `/claude-superpowers:onboard` — it covers this feature alongside the other optional flows.
 - Valid values are `"per-task"` (the default) and `"at-end"`; anything else falls back to per-task.
 - **User-level default:** the file may instead live at `~/.claude/superpowers/workflow.json`, applying to every project that has no project-level file. Lookup is project first, then user — the first file found wins entirely (no merging). A project file of `{"commitStrategy": "per-task"}` restores per-task commits for that project while a user-level default exists.
 - The plan-time side is enforced: a TaskCreate gate blocks plan tasks that carry per-task commit steps while `at-end` is configured (fail-open, kill switch `SUPERPOWERS_WORKFLOW_GUARD=0`). Dispatch-time stays advisory, and the notice takes effect from the next session on (see the design doc for this boundary).
@@ -359,7 +381,7 @@ Opt in via `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/plugins/marketplaces/superpowers-extended-cc-marketplace/hooks/examples/pre-commit-check-tasks.sh"
+            "command": "bash ~/.claude/plugins/marketplaces/claude-superpowers/hooks/examples/pre-commit-check-tasks.sh"
           }
         ]
       }
@@ -387,7 +409,7 @@ Opt in via `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/plugins/marketplaces/superpowers-extended-cc-marketplace/hooks/examples/post-task-complete-revalidate.sh"
+            "command": "bash ~/.claude/plugins/marketplaces/claude-superpowers/hooks/examples/post-task-complete-revalidate.sh"
           }
         ]
       }
@@ -413,7 +435,7 @@ Opt in via `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/plugins/marketplaces/superpowers-extended-cc-marketplace/hooks/examples/stop-revalidate-user-gates.sh"
+            "command": "bash ~/.claude/plugins/marketplaces/claude-superpowers/hooks/examples/stop-revalidate-user-gates.sh"
           }
         ]
       }
@@ -441,7 +463,7 @@ Opt in via `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/plugins/marketplaces/superpowers-extended-cc-marketplace/hooks/examples/pre-task-blockedby-enforce.sh"
+            "command": "bash ~/.claude/plugins/marketplaces/claude-superpowers/hooks/examples/pre-task-blockedby-enforce.sh"
           }
         ]
       }
@@ -471,7 +493,7 @@ Opt in via `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/plugins/marketplaces/superpowers-extended-cc-marketplace/hooks/examples/pre-agent-task-dispatch-validate.sh"
+            "command": "bash ~/.claude/plugins/marketplaces/claude-superpowers/hooks/examples/pre-agent-task-dispatch-validate.sh"
           }
         ]
       }
@@ -499,7 +521,7 @@ Opt in via `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/plugins/marketplaces/superpowers-extended-cc-marketplace/hooks/examples/post-agent-return-validate.sh"
+            "command": "bash ~/.claude/plugins/marketplaces/claude-superpowers/hooks/examples/post-agent-return-validate.sh"
           }
         ]
       }
@@ -535,7 +557,7 @@ Opt in via `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/plugins/marketplaces/superpowers-extended-cc-marketplace/hooks/examples/stop-deflection-guard.sh"
+            "command": "bash ~/.claude/plugins/marketplaces/claude-superpowers/hooks/examples/stop-deflection-guard.sh"
           }
         ]
       }
@@ -551,7 +573,7 @@ See the header of `hooks/examples/stop-deflection-guard.sh` for the full list of
 Skills update automatically when you update the plugin:
 
 ```bash
-/plugin update superpowers-extended-cc@superpowers-extended-cc-marketplace
+/plugin update claude-superpowers@claude-superpowers
 ```
 
 ## Upstream Compatibility

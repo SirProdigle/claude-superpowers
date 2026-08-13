@@ -106,9 +106,9 @@ path = sys.argv[1]
 # Pre-filter: every signal this scan reacts to lives on a line containing one
 # of these literals. Tool_use signals always carry the tool name
 # ("Skill"/"TaskCreate"/"AskUserQuestion"); every user-message signal string
-# starts with "superpowers-extended-cc:". One compiled-regex search per line
+# starts with "claude-superpowers:". One compiled-regex search per line
 # is the cheapest formulation that needs no per-line Python overhead.
-SIG = re.compile(b"Skill|TaskCreate|AskUserQuestion|superpowers-extended-cc:")
+SIG = re.compile(b"Skill|TaskCreate|AskUserQuestion|claude-superpowers:")
 
 try:
     f = open(path, "rb")
@@ -192,12 +192,12 @@ with f:
             text = extract_text(raw_content)
 
             # writing-plans arm via user message (slash command injection pattern)
-            if "superpowers-extended-cc:writing-plans" in text or "superpowers-extended-cc:write-plan" in text:
+            if "claude-superpowers:writing-plans" in text or "claude-superpowers:write-plan" in text:
                 arm_pos = pos
 
             # execution disarm via user message
-            if ("superpowers-extended-cc:subagent-driven-development" in text
-                    or "superpowers-extended-cc:executing-plans" in text):
+            if ("claude-superpowers:subagent-driven-development" in text
+                    or "claude-superpowers:executing-plans" in text):
                 disarm_pos = pos
 
 # armed iff: arm_pos set AND (no disarm OR disarm before arm)

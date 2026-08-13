@@ -15,7 +15,7 @@ Load plan, review critically, execute all tasks, report when complete.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Note:** Superpowers works best with subagent support. If subagents are available, use superpowers-extended-cc:subagent-driven-development instead of this skill.
+**Note:** Superpowers works best with subagent support. If subagents are available, use claude-superpowers:subagent-driven-development instead of this skill.
 
 ## Consulting the Plan Author
 
@@ -42,7 +42,7 @@ Before calling `using-git-worktrees`, check if a worktree already exists:
 
 1. Run `git worktree list` to see all existing worktrees
 2. If a worktree for the plan's branch already exists: **cd into it — do NOT create a new one**
-3. If on main/master with no worktree: **REQUIRED SUB-SKILL:** Use `superpowers-extended-cc:using-git-worktrees` to create one
+3. If on main/master with no worktree: **REQUIRED SUB-SKILL:** Use `claude-superpowers:using-git-worktrees` to create one
 
 ### Step 1: Load and Review Plan
 1. Read plan file
@@ -82,7 +82,7 @@ For each task:
 
 After all tasks complete and verified:
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use superpowers-extended-cc:finishing-a-development-branch
+- **REQUIRED SUB-SKILL:** Use claude-superpowers:finishing-a-development-branch
 - Follow that skill to verify tests, present options, execute choice
 
 ## When to Stop and Ask for Help
@@ -114,6 +114,6 @@ After all tasks complete and verified:
 ## Integration
 
 **Required workflow skills:**
-- **superpowers-extended-cc:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
-- **superpowers-extended-cc:writing-plans** - Creates the plan this skill executes
-- **superpowers-extended-cc:finishing-a-development-branch** - Complete development after all tasks
+- **claude-superpowers:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
+- **claude-superpowers:writing-plans** - Creates the plan this skill executes
+- **claude-superpowers:finishing-a-development-branch** - Complete development after all tasks

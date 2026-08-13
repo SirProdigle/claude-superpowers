@@ -1,6 +1,6 @@
 {
-  "name": "superpowers-extended-cc",
-  "description": "Claude Code-specific fork of Superpowers with native task management and CC-specific enhancements",
+  "name": "claude-superpowers",
+  "description": "Claude Code Superpowers \u2014 brainstorm, plan, TDD, gates and subagent-driven development. Fork of pcvelz/superpowers.",
   "version": "6.4.1-dev",
   "author": {
     "name": "pcvelz",

@@ -425,7 +425,7 @@ echo "Test 8: plugin-scoped subagent_type resolves NOWHERE - the plugin ships no
 # If someone reinstates the plugin-root lookup AND ships definitions again,
 # this test fails and forces the vanilla-first cost question to be re-answered
 # rather than reintroduced silently.
-INPUT=$(printf '{"tool_name":"Agent","tool_input":{"subagent_type":"superpowers-extended-cc:effort-low","prompt":"go"},"transcript_path":"%s","cwd":"%s"}' \
+INPUT=$(printf '{"tool_name":"Agent","tool_input":{"subagent_type":"claude-superpowers:effort-low","prompt":"go"},"transcript_path":"%s","cwd":"%s"}' \
     "$WORK/tier-mechanical.jsonl" "$WORK/project")
 : > "$SUPERPOWERS_USERGATE_TRACE_LOG"
 rc=$(run_hook "$INPUT" CLAUDE_PLUGIN_ROOT="$REPO_ROOT")

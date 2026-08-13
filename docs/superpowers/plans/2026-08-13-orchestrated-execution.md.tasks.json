@@ -22,7 +22,7 @@
     {
       "id": 13,
       "subject": "Task 4: The orchestrating-execution skill",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** A skill that takes a finished plan, offers Beads adoption if needed, generates the manifest, ports the plan into Beads, and launches the workflow.\n\n**Files:**\n- Create: `skills/orchestrating-execution/SKILL.md`\n\n**Acceptance Criteria:**\n- [ ] Describes the Beads-absent branch: offer `bd init`, continue untracked, or cancel\n- [ ] Runs `scripts/bundle-plan.mjs` and stops on non-zero exit, surfacing the message verbatim\n- [ ] Specifies the exact `bd create` invocations for the epic and children, including `--external-ref`\n- [ ] States the `bd link A B` argument-order warning\n- [ ] States that agents never run `bd close`\n- [ ] Specifies that the coordinator reads the manifest and `model-routing.json` and passes both via `args`\n- [ ] Ends by suggesting `/complete-epic`\n\n**Verify:** `head -4 skills/orchestrating-execution/SKILL.md` shows valid frontmatter, and `claude plugin validate .` passes\n\n```json:metadata\n{\"files\": [\"skills/orchestrating-execution/SKILL.md\"], \"verifyCommand\": \"head -4 skills/orchestrating-execution/SKILL.md && claude plugin validate .\", \"acceptanceCriteria\": [\"Describes the Beads-absent branch: offer `bd init`, continue untracked, or cancel\", \"Runs `scripts/bundle-plan.mjs` and stops on non-zero exit, surfacing the message verbatim\", \"Specifies the exact `bd create` invocations for the epic and children, including `--external-ref`\", \"States the `bd link A B` argument-order warning\", \"States that agents never run `bd close`\", \"Specifies that the coordinator reads the manifest and `model-routing.json` and passes both via `args`\", \"Ends by suggesting `/complete-epic`\"], \"modelTier\": \"standard\"}\n```",
       "blockedBy": [
         11,
@@ -49,5 +49,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-08-13T05:10:00Z"
+  "lastUpdated": "2026-08-13T06:00:00Z"
 }

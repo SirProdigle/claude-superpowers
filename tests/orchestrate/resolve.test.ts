@@ -35,6 +35,10 @@ try {
 }
 
 const ROUTING = { mechanical: "sonnet", standard: "opus", frontier: "fable" };
+// validateArgs now also requires ctx/epicId (fix round 2, minor 7) — every
+// validateArgs fixture below carries these so each test still isolates the
+// one rejection/acceptance rule it's meant to exercise.
+const CTX = { ctx: "context", epicId: "epic-1" };
 
 test("resolves tier to model", () => {
   expect(resolveModel("standard", ROUTING)).toBe("opus");
@@ -51,17 +55,17 @@ test("escalates one tier and stops at frontier", () => {
 });
 
 test("rejects a bundle with no tier", () => {
-  expect(() => validateArgs({ mode: "full", routing: ROUTING,
+  expect(() => validateArgs({ mode: "full", routing: ROUTING, ...CTX,
     bundles: [{ id: "b1", taskIds: [1] }] })).toThrow(/tier/);
 });
 
 test("rejects an unknown mode", () => {
-  expect(() => validateArgs({ mode: "turbo", routing: ROUTING,
+  expect(() => validateArgs({ mode: "turbo", routing: ROUTING, ...CTX,
     bundles: [{ id: "b1", tier: "standard", taskIds: [1] }] })).toThrow(/mode/);
 });
 
 test("accepts a well-formed args object", () => {
-  expect(() => validateArgs({ mode: "simple", routing: ROUTING,
+  expect(() => validateArgs({ mode: "simple", routing: ROUTING, ...CTX,
     bundles: [{ id: "b1", tier: "standard", taskIds: [1] }] })).not.toThrow();
 });
 
@@ -72,4 +76,82 @@ test("accepts a well-formed args object", () => {
 test("workflow body still ends in a top-level return of the result object", () => {
   const body = src.slice(idx);
   expect(body).toMatch(/\n\s*return\s*\{\s*\n\s*epicId,/);
+});
+
+// ---- fix round 2 ----
+
+test("rejects an args object with no ctx", () => {
+  expect(() => validateArgs({ mode: "simple", routing: ROUTING, epicId: "epic-1",
+    bundles: [{ id: "b1", tier: "standard", taskIds: [1] }] })).toThrow(/ctx/);
+});
+
+test("rejects an args object with no epicId", () => {
+  expect(() => validateArgs({ mode: "simple", routing: ROUTING, ctx: "context",
+    bundles: [{ id: "b1", tier: "standard", taskIds: [1] }] })).toThrow(/epicId/);
+});
+
+test("rejects a bundle with no id", () => {
+  expect(() => validateArgs({ mode: "simple", routing: ROUTING, ...CTX,
+    bundles: [{ tier: "standard", taskIds: [1] }] })).toThrow(/id/);
+});
+
+// This is the exact double-dispatch scenario from the review: two id-less
+// bundles would previously both pass validation, then both `f.bundleId ===
+// b.id` (undefined === undefined) AND `!f.bundleId` would match the same
+// finding, sending it to two fixers that both commit.
+test("rejects duplicate bundle ids", () => {
+  expect(() => validateArgs({ mode: "simple", routing: ROUTING, ...CTX,
+    bundles: [
+      { id: "b1", tier: "standard", taskIds: [1] },
+      { id: "b1", tier: "mechanical", taskIds: [2] },
+    ] })).toThrow(/duplicate/i);
+});
+
+test("rejects a bundle with an empty taskIds array", () => {
+  expect(() => validateArgs({ mode: "simple", routing: ROUTING, ...CTX,
+    bundles: [{ id: "b1", tier: "standard", taskIds: [] }] })).toThrow(/taskIds/);
+});
+
+test("rejects a missing taskIds array without waiting for the Implement dispatch to fail", () => {
+  expect(() => validateArgs({ mode: "simple", routing: ROUTING, ...CTX,
+    bundles: [{ id: "b1", tier: "standard" }] })).toThrow(/taskIds/);
+});
+
+test("rejects blockedByBundles naming a bundle that appears later in the array", () => {
+  expect(() => validateArgs({ mode: "full", routing: ROUTING, ...CTX,
+    bundles: [
+      { id: "b1", tier: "standard", taskIds: [1], blockedByBundles: ["b2"] },
+      { id: "b2", tier: "standard", taskIds: [2] },
+    ] })).toThrow(/blockedByBundles/);
+});
+
+test("rejects blockedByBundles naming a bundle that doesn't exist", () => {
+  expect(() => validateArgs({ mode: "full", routing: ROUTING, ...CTX,
+    bundles: [{ id: "b1", tier: "standard", taskIds: [1], blockedByBundles: ["nope"] }] }))
+    .toThrow(/blockedByBundles/);
+});
+
+test("accepts blockedByBundles naming a bundle earlier in the array", () => {
+  expect(() => validateArgs({ mode: "full", routing: ROUTING, ...CTX,
+    bundles: [
+      { id: "b1", tier: "standard", taskIds: [1] },
+      { id: "b2", tier: "standard", taskIds: [2], blockedByBundles: ["b1"] },
+    ] })).not.toThrow();
+});
+
+// Execution-testing the fix itself isn't possible under `bun test` (the
+// workflow body never runs — `agent` is undefined, so the whole guarded
+// block is skipped). This asserts the fix is present in the real source:
+// after the 2-round fix loop, testLoop must run one more mechanical-tier
+// verify() before falling through to "exhausted", so a fix applied on the
+// last iteration is checked instead of being reported as still-red by
+// default (which, in full mode, silently cancels Refactor on a green tree).
+test("test loop does a final mechanical verification before giving up", () => {
+  const body = src.slice(idx);
+  const loopToExhausted = body.slice(
+    body.indexOf("for (let i = 0; i < 2; i++)"),
+    body.indexOf("test loop exhausted after 2 fix rounds")
+  );
+  expect(loopToExhausted).toMatch(/const finalRes = await verify\(/);
+  expect(loopToExhausted).toMatch(/if \(finalRes && finalRes\.pass\)/);
 });

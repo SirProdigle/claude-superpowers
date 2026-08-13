@@ -34,13 +34,48 @@ export function validateArgs(a) {
   if (!a || typeof a !== "object") throw new Error("orchestrate: args missing");
   if (a.mode !== "simple" && a.mode !== "full")
     throw new Error(`orchestrate: mode must be "simple" or "full", got ${JSON.stringify(a.mode)}`);
+  // ctx and epicId are prefixed onto every prompt and embedded in every commit
+  // message unchecked — a missing one produces prompts starting with the
+  // literal string "undefined" and commits reading "undefined: test fixes".
+  if (typeof a.ctx !== "string" || a.ctx.length === 0)
+    throw new Error("orchestrate: ctx must be a non-empty string");
+  if (typeof a.epicId !== "string" || a.epicId.length === 0)
+    throw new Error("orchestrate: epicId must be a non-empty string");
   if (!Array.isArray(a.bundles) || a.bundles.length === 0)
     throw new Error("orchestrate: bundles must be a non-empty array");
-  for (const b of a.bundles) {
+  const seenIds = new Set();
+  a.bundles.forEach((b, i) => {
+    // A missing/blank id is worse than a missing tier: `f.bundleId === b.id`
+    // (undefined === undefined) would route a bundle-less finding to BOTH
+    // this bundle's fixer and the cross-cutting fixer, double-dispatching a
+    // fix. Reject it here, before any spend, rather than let it surface as a
+    // duplicated commit mid-run.
+    if (typeof b.id !== "string" || b.id.length === 0)
+      throw new Error(`orchestrate: bundle at index ${i} has no valid id (got ${JSON.stringify(b.id)})`);
+    if (seenIds.has(b.id))
+      throw new Error(`orchestrate: duplicate bundle id "${b.id}"`);
+    seenIds.add(b.id);
     if (!TIERS.includes(b.tier))
       throw new Error(`orchestrate: bundle ${b.id} has no valid tier (got ${JSON.stringify(b.tier)})`);
     resolveModel(b.tier, a.routing);
-  }
+    // A missing taskIds array previously wasn't caught until the Implement
+    // dispatch tried `b.taskIds.join(...)` mid-run, after spending had
+    // already started on earlier bundles.
+    if (!Array.isArray(b.taskIds) || b.taskIds.length === 0)
+      throw new Error(`orchestrate: bundle ${b.id} must have a non-empty taskIds array`);
+    // bundle-plan.mjs emits blockedByBundles and topologically sorts its
+    // output, but nothing here checked that — the Implement loop just walks
+    // `bundles` in array order and trusts it. Make the ordering contract
+    // explicit: every dependency must already have appeared.
+    for (const dep of b.blockedByBundles || []) {
+      const depIndex = a.bundles.findIndex((x) => x.id === dep);
+      if (depIndex === -1 || depIndex >= i)
+        throw new Error(
+          `orchestrate: bundle ${b.id} lists blockedByBundles "${dep}", which must name a bundle ` +
+          `appearing earlier in the bundles array (bundler output must already be topologically sorted)`
+        );
+    }
+  });
   return true;
 }
 
@@ -82,10 +117,10 @@ const TESTRES = {
   required: ["pass", "summary"],
 };
 
-// Workflow body — only runs under the Workflow tool, where `agent`, `phase`,
-// `log` and `args` are globals. Guarded so `bun test` can read the helper
-// prelude above without executing this block (see the file-top note on why
-// the trailing `return` below is intentional).
+// Workflow body — only runs under the Workflow tool, where `agent`, `parallel`,
+// `phase`, `log` and `args` are globals. Guarded so `bun test` can read the
+// helper prelude above without executing this block (see the file-top note on
+// why the trailing `return` below is intentional).
 if (typeof agent === "function") {
   const A = typeof args === "string" ? JSON.parse(args) : args;
   validateArgs(A);
@@ -114,14 +149,15 @@ Return a SHORT summary (5-10 lines): what you built, key files, deviations, and 
 bundles must know.`,
       { tier: b.tier, label: `impl:${b.id}`, phase: "Implement" }
     );
-    notes.push(`${b.id} (tasks ${b.taskIds.join(",")}): ${r}`);
+    notes.push(`${b.id} (tasks ${b.taskIds.join(",")}): ${r || "(agent returned nothing)"}`);
     log(`implemented ${b.id}`);
   }
 
-  // ---- Review
-  phase("Review");
+  // ---- Review (full mode only — simple mode folds review into Fixes below,
+  // so this phase must not be announced when there's nothing in it).
   let findings = [];
   if (mode === "full") {
+    phase("Review");
     const perBundle = await parallel(bundles.map((b) => () =>
       dispatch(
         `Review the commits for beads tasks ${b.taskIds.join(", ")} (bundle ${b.id}). Read each
@@ -182,14 +218,15 @@ ${cross.map(fmt).join("\n")}`,
   // ---- Test loop: run at mechanical, fix at standard, escalate once.
   const testLoop = async (round) => {
     phase("Test");
-    let tier = "standard";
-    for (let i = 0; i < 2; i++) {
-      const res = await dispatch(
-        `Run the FULL verification for this project: the test suite plus typecheck. pass=true ONLY
+    const verify = (label) => dispatch(
+      `Run the FULL verification for this project: the test suite plus typecheck. pass=true ONLY
 if everything passes. Quote exact failing test names and errors in the summary.
 Do not fix anything.`,
-        { tier: "mechanical", label: `test:${round}:${i}`, phase: "Test", schema: TESTRES }
-      );
+      { tier: "mechanical", label, phase: "Test", schema: TESTRES }
+    );
+    let tier = "standard";
+    for (let i = 0; i < 2; i++) {
+      const res = await verify(`test:${round}:${i}`);
       if (res && res.pass) { log(`tests green (${round}, round ${i})`); return true; }
       await dispatch(
         `Fix these test/typecheck failures. Fix code or tests, whichever is wrong. Run until green,
@@ -199,7 +236,15 @@ ${res ? res.summary : "test agent returned nothing — run the suite yourself an
       );
       tier = escalate(tier);
     }
-    log(`test loop exhausted after 2 rounds (${round}) — stopping, branch left intact`);
+    // The i=1 fix above just ran at the escalated tier (frontier — the most
+    // expensive fixer in the whole run) and was never re-verified. Without
+    // this, a tree that IS green after that fix gets misreported as red,
+    // which in full mode silently cancels the entire Refactor phase. This is
+    // one more mechanical-tier verification, not a third fix round — the
+    // "max 2 fix rounds" bound is unaffected.
+    const finalRes = await verify(`test:${round}:final`);
+    if (finalRes && finalRes.pass) { log(`tests green (${round}, final check)`); return true; }
+    log(`test loop exhausted after 2 fix rounds (${round}) — stopping, branch left intact`);
     return false;
   };
 

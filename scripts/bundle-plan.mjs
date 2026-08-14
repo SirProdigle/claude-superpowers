@@ -132,13 +132,75 @@ const overlaps = (a, b) => [...filesOf(a)].some((f) => filesOf(b).has(f));
 const directEdge = (a, b) =>
   (a.blockedBy || []).includes(b.id) || (b.blockedBy || []).includes(a.id);
 
+// The two merge classes are NOT equally binding, and treating them as if they
+// were is what manufactures bundle-level cycles on acyclic task graphs.
+//
+//   shared files  — MANDATORY. Two tasks writing one file must be one agent or
+//                   they clobber each other. Never declined; if these alone
+//                   cycle, that is a real plan defect and the error is correct.
+//   direct edge   — OPTIONAL. Merging a same-tier dependency pair saves a
+//                   dispatch and keeps context in one agent. No correctness
+//                   content, so it can always be declined.
+//
+// Applied unconditionally, the optional class lets a task that depends on many
+// same-tier tasks be absorbed into their group, dragging that group's ordering
+// constraints in with it — the same bridging defect removed from the packing
+// pass below, one step removed. Two guards, both narrow:
+//
+//   1. A task declaring no files is uncoupled by definition. There is nothing
+//      for the edge to be an efficiency win over, and absorbing it silently
+//      hands one agent both an implementation task and the verification task
+//      that was meant to check it. File-less terminal tasks stay their own
+//      bundle.
+//   2. Otherwise accept greedily, keeping each merge only while the induced
+//      bundle graph stays acyclic.
+const mandatory = [];
+const optional = [];
 for (let i = 0; i < tasks.length; i++) {
   for (let j = i + 1; j < tasks.length; j++) {
     const a = tasks[i], b = tasks[j];
     if (tierOf(a) !== tierOf(b)) continue;          // never merge across tiers
-    if (overlaps(a, b) || directEdge(a, b)) union(a.id, b.id);
+    if (overlaps(a, b)) mandatory.push([a.id, b.id]);
+    else if (directEdge(a, b) && filesOf(a).size && filesOf(b).size)
+      optional.push([a.id, b.id]);
   }
 }
+
+// Rebuilt from scratch per probe: plans are tens of tasks, so the repeated work
+// is irrelevant, and a throwaway union-find avoids having to undo a union.
+const acyclicWith = (pairs) => {
+  const par = new Map(tasks.map((t) => [t.id, t.id]));
+  const f = (x) => (par.get(x) === x ? x : (par.set(x, f(par.get(x))), par.get(x)));
+  for (const [a, b] of pairs) { const ra = f(a), rb = f(b); if (ra !== rb) par.set(ra, rb); }
+
+  const edges = new Map();
+  const indeg = new Map();
+  for (const t of tasks) { edges.set(f(t.id), edges.get(f(t.id)) || new Set()); indeg.set(f(t.id), 0); }
+  for (const t of tasks)
+    for (const dep of t.blockedBy || []) {
+      if (!par.has(dep)) continue;
+      const from = f(t.id), to = f(dep);
+      if (from === to || edges.get(to).has(from)) continue;
+      edges.get(to).add(from);
+      indeg.set(from, indeg.get(from) + 1);
+    }
+
+  const queue = [...indeg.keys()].filter((k) => indeg.get(k) === 0);
+  let seen = 0;
+  while (queue.length) {
+    const n = queue.pop();
+    seen++;
+    for (const next of edges.get(n)) {
+      indeg.set(next, indeg.get(next) - 1);
+      if (indeg.get(next) === 0) queue.push(next);
+    }
+  }
+  return seen === indeg.size;
+};
+
+const kept = [...mandatory];
+for (const pair of optional) if (acyclicWith([...kept, pair])) kept.push(pair);
+for (const [a, b] of kept) union(a, b);
 
 // --- bundles are groups formed purely by real coupling: shared files, or a
 // direct blockedBy edge (both established above). There is deliberately no

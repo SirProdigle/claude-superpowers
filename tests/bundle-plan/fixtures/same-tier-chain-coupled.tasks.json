@@ -1,0 +1,8 @@
+{
+  "planPath": "docs/superpowers/plans/x.md",
+  "tasks": [
+    {"id": 0, "subject": "Mechanical, first in the chain", "status": "pending", "metadata": {"files": ["src/a.ts"], "modelTier": "mechanical"}},
+    {"id": 1, "subject": "Mechanical, blocked by 0, no shared file", "status": "pending", "blockedBy": [0], "metadata": {"files": ["src/b.ts"], "modelTier": "mechanical"}}
+  ],
+  "lastUpdated": "2026-08-14T00:00:00Z"
+}

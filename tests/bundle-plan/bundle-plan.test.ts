@@ -252,3 +252,35 @@ test("MINOR: a repeated cap flag honours its last occurrence", async () => {
   const r = await run("oversized.tasks.json", "--max-tasks", "3", "--max-tasks", "99");
   expect(r.code).toBe(0);
 });
+
+test("a file-less terminal task is never absorbed by the tasks it depends on", async () => {
+  // A verification gate declares no files and is blocked by every other task.
+  // Merging it on the dependency edge alone dragged its blockers' ordering
+  // constraints into one bundle — either a fake cycle, or (worse, when it
+  // happened to stay acyclic) one agent silently owning both an implementation
+  // task and the gate that was meant to check it.
+  const r = await run("fileless-terminal-gate.tasks.json");
+  expect(r.code).toBe(0);
+  const m = JSON.parse(r.stdout);
+
+  const gate = m.bundles.find((b: any) => b.taskIds.includes(4));
+  expect(gate.taskIds).toEqual([4]);
+  expect(gate.files).toEqual([]);
+
+  // and it still sorts last, after every bundle it depends on
+  const pos = new Map(m.bundles.map((b: any, i: number) => [b.id, i]));
+  expect(gate.blockedByBundles.length).toBe(4);
+  for (const dep of gate.blockedByBundles)
+    expect(pos.get(dep)).toBeLessThan(pos.get(gate.id));
+});
+
+test("a same-tier dependency pair with files on both sides still merges", async () => {
+  // Guards the fix against over-correcting: declining the optional merge is
+  // only correct when a side is uncoupled or the graph would cycle. A plain
+  // coupled chain must still collapse into one bundle and one dispatch.
+  const r = await run("same-tier-chain-coupled.tasks.json");
+  expect(r.code).toBe(0);
+  const m = JSON.parse(r.stdout);
+  expect(m.bundles.length).toBe(1);
+  expect(m.bundles[0].taskIds).toEqual([0, 1]);
+});

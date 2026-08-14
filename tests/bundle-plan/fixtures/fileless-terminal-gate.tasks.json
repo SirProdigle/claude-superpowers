@@ -1,0 +1,11 @@
+{
+  "planPath": "docs/superpowers/plans/x.md",
+  "tasks": [
+    {"id": 0, "subject": "Standard implementation", "status": "pending", "metadata": {"files": ["src/a.ts"], "modelTier": "standard"}},
+    {"id": 1, "subject": "Standard implementation, unrelated to 0", "status": "pending", "metadata": {"files": ["src/b.ts"], "modelTier": "standard"}},
+    {"id": 2, "subject": "Standard implementation, unrelated to 0 and 1", "status": "pending", "metadata": {"files": ["src/c.ts"], "modelTier": "standard"}},
+    {"id": 3, "subject": "Mechanical, blocked by 0", "status": "pending", "blockedBy": [0], "metadata": {"files": ["src/d.ts"], "modelTier": "mechanical"}},
+    {"id": 4, "subject": "Verification gate, no files, blocked by everything", "status": "pending", "blockedBy": [0, 1, 2, 3], "metadata": {"files": [], "modelTier": "standard"}}
+  ],
+  "lastUpdated": "2026-08-14T00:00:00Z"
+}

@@ -5,8 +5,8 @@
 **Supersedes parts of:** `skills/orchestrating-execution/SKILL.md` §3 (bundling), §6b (reference script),
 `skills/writing-plans/SKILL.md` (plan header), `skills/subagent-driven-development/implementer-prompt.md`
 
-A cost and latency redesign of the orchestrated execution pipeline, grounded in measurement of 240
-real workflow agents across five large runs. The pipeline's *quality* properties are not the target
+A cost and latency redesign of the orchestrated execution pipeline, grounded in measurement of 128
+real workflow agents across four large runs (see the correction note under "The measurement"). The pipeline's *quality* properties are not the target
 and must not regress; the target is the token cost and wall-clock of achieving them.
 
 ## Motivation
@@ -22,20 +22,42 @@ lifetime, and keeping agents alive is the most expensive available change.
 
 ## The measurement
 
-Five workflow runs, chosen as the largest by total context moved:
+Workflow runs, chosen as the largest by total context moved:
 
-| Run | Project | Agents |
+| Run | Project | Agents (≥5 real turns) |
 |---|---|---|
-| `wf_1cfcc8de-49b` | chimera-ant | 29 |
-| `wf_bc5b71bd-821` | lottogame | 106 |
-| `wf_9dfbf881-c23` | spacelanguage | 51 |
+| `wf_1cfcc8de-49b` | chimera-ant | 19 |
+| `wf_9dfbf881-c23` | spacelanguage | 45 |
 | `wf_da9c80a2-756` | mtggame | 47 |
-| `wf_8bdce681-4e8` | chimera-ant | 38 |
+| `wf_8bdce681-4e8` | chimera-ant | 17 |
+| `wf_bc5b71bd-821` | lottogame | excluded — see correction |
 
 Source: `~/.claude/projects/<proj>/<session>/subagents/workflows/<runId>/agent-*.jsonl`. Every
 assistant message carries a `usage` record with `input_tokens`, `cache_creation_input_tokens`,
-`cache_read_input_tokens` and `output_tokens`, plus the full tool-call stream. 236 agents with ≥5
-turns; ~25,500 turns total.
+`cache_read_input_tokens` and `output_tokens`, plus the full tool-call stream.
+
+<HARD-GATE>
+**Correction, 2026-08-15 — all figures below are the CORRECTED ones. Do not cite an earlier
+version of this document.**
+
+The first pass of this analysis counted one "turn" per `type:"assistant"` line. That is wrong:
+a real transcript emits SEVERAL assistant lines per API response, all sharing one `message.id`,
+each carrying a snapshot of the same `usage` object. Measured inflation is **1.60x-1.78x** across
+these runs (chimera-49b: 3,094 lines → 1,914 real turns).
+
+The bias is not uniform. Within a `message.id`, `cache_read` / `cache_creation` / `input` are
+identical in every snapshot, so naive summing multiplies them in full; `output_tokens` grows across
+snapshots (partial → final), so it is over-counted by less. Naive summing therefore inflates input
+MORE than output and understates output's share of cost — which is the one headline figure that
+moved materially when corrected (output went from an apparent ~5% of cost to 8-14%).
+
+Correct method, and the one `scripts/wf-cost.mjs` implements: key on `message.id` and keep the LAST
+record per id. Do not sum within a group; do not keep the first.
+</HARD-GATE>
+
+Sample after correction: 128 agents with ≥5 real turns across four runs. The lottogame run drops
+out of the per-run table below — after deduplication most of its agents fall under the ≥5-turn
+floor, which is itself a finding: it was a run of many very short agents.
 
 Cost index used throughout: `output×5 + fresh_input×1 + cache_read×0.1`, reflecting the shape of
 Anthropic pricing (output ≈ 5× input, cache read ≈ 0.1× input). `fresh_input` =
@@ -43,15 +65,17 @@ Anthropic pricing (output ≈ 5× input, cache read ≈ 0.1× input). `fresh_inp
 
 ### Finding 1 — cost is cache-read input, not output and not exploration
 
-| | chimera-49b | lotto | spacelang | mtg | chimera-4e8 |
-|---|---|---|---|---|---|
-| cache-read input | 977M | 677M | 762M | 594M | 808M |
-| fresh input | 16M | 36M | 19M | 25M | 14M |
-| output | 1.3M | 2.7M | 1.8M | 1.6M | 1.1M |
+| | chimera-49b | spacelang | mtg | chimera-4e8 |
+|---|---|---|---|---|
+| cache-read input | 626M | 473M | 361M | 530M |
+| fresh input | 6.8M | 8.6M | 12.8M | 5.8M |
+| output | 1.24M | 1.69M | 1.60M | 1.10M |
+| cache-read share of cost | 82.8% | 73.5% | 63.4% | 82.4% |
+| output share of cost | 8.2% | 13.1% | 14.0% | 8.6% |
 
-Cache-read is 95-98% of tokens moved and ~81% of cost. Output is ~5%. Tool results — everything
-the agents read from the repo and the shell combined — total ~1.26M tokens against ~994M tokens of
-input in the chimera-49b run: **0.1%**.
+Cache-read is ~98% of tokens *moved* and **63-83% of cost**. Output is **8-14% of cost** — small,
+but not the rounding error the uncorrected figures suggested. Tool results — everything the agents
+read from the repo and the shell combined — remain a rounding error against total input: ~0.1%.
 
 ### Finding 2 — the cost function
 
@@ -62,46 +86,47 @@ cost(agent) ≈ Σ over turns of context-at-that-turn
             ≈ turns × mean context
 ```
 
-Context grows monotonically. **Workflow agents do not compact** — only 1.7% of 236 agents show any
+Context grows monotonically. **Workflow agents do not compact** — under 2% of agents show any
 context drop, consistent with noise. A long agent never gets relief.
 
 Measured parameters:
 
 - **Fresh-agent floor** (turn-1 context: system prompt + tool definitions + dispatch prompt):
-  median **26,306** tokens (p25 23,148, p75 27,993, max 65,484).
-- **Growth**: median **1,028** tokens/turn (p75 1,327, p90 1,691).
-- **Turns per agent**: median 72-204 depending on run; p90 132-273.
+  median **27,256** tokens (p25 25,884, p75 42,399).
+- **Growth**: median **2,244** tokens/turn (p75 2,895).
+- **Turns per agent**: median **58**; p90 164; max 266.
 
 Because the floor is low and growth is superlinear in lifetime, *spawning an agent is cheap and
 keeping one alive is expensive*.
 
 ### Finding 3 — cost concentrates in long-lived agents
 
-| Run | top agent's share | top 3 | top 20% of agents |
-|---|---|---|---|
-| chimera-49b | 19.6% | 38.2% | 47.3% |
-| lottogame | 5.7% | 13.1% | 47.3% |
-| spacelanguage | 9.4% | 22.9% | 48.8% |
-| mtggame | 12.1% | 28.0% | 56.5% |
-| chimera-4e8 | 13.6% | 33.1% | 33.1% |
+| Run | top agent's share | top 20% of agents |
+|---|---|---|
+| chimera-49b | 19.3% | 49.6% |
+| spacelanguage | 10.9% | 52.1% |
+| mtggame | 12.3% | 61.7% |
+| chimera-4e8 | 14.8% | 45.0% |
 
-The worst single agent observed: **443 turns, context 42k → 699k, 208M tokens of context moved** —
-20% of a 29-agent run by itself.
+The worst single agent observed: **266 real turns, context 42k → 699k** — 19% of its run's cost by
+itself. Concentration is *higher* than the uncorrected pass suggested: the top fifth of agents
+carries 45-62% of cost.
 
 ### Finding 4 — the agent's own output drives context growth
 
 For the most expensive agent in each run, decomposing growth:
 
-| Run | turns | ctx start → end | own output | tool results |
-|---|---|---|---|---|
-| chimera-49b | 443 | 42k → 699k | 254k | 126k |
-| lottogame | 272 | 23k → 267k | 122k | 64k |
-| spacelanguage | 337 | 26k → 368k | 108k | 121k |
-| mtggame | 325 | 22k → 349k | 124k | 118k |
-| chimera-4e8 | 335 | 51k → 501k | 130k | 113k |
+| Run | turns | ctx start → end | own output |
+|---|---|---|---|
+| chimera-49b | 266 | 42k → 699k | 254k |
+| spacelanguage | 231 | 26k → 368k | 105k |
+| mtggame | 209 | 22k → 349k | 124k |
+| chimera-4e8 | 228 | 51k → 501k | 129k |
 
-Own output is the larger component in four of five. Since thinking tokens are output tokens,
-**reasoning effort compounds into context growth**, not just into per-turn price.
+In every case the agent's own output is a large fraction of its context growth — comparable to or
+exceeding everything it read. Since thinking tokens are output tokens, **reasoning effort compounds
+into context growth**, not just into per-turn price. This is the mechanism that makes a long,
+high-effort agent quadratically expensive: it writes, then re-reads what it wrote, every turn.
 
 ### Finding 5 — turns are driven by Bash, not Read
 
@@ -125,22 +150,29 @@ Median totals per agent, by model:
 A 10.5× spread in volume before rate multipliers, because higher tiers take more turns *and* grow
 faster per turn *and* emit more per turn, and those multiply.
 
-**Caveat:** this is confounded by selection — harder tasks are routed to higher tiers, and harder
-tasks take more turns. The table does not isolate a model effect. The mechanism it illustrates
-(turns → superlinear cost) is sound regardless of which way the causality runs.
+**Two caveats, both load-bearing.** First, this is confounded by selection — harder tasks are
+routed to higher tiers, and harder tasks take more turns, so the table does not isolate a model
+effect. Second, **this table alone was not recomputed after the `message.id` correction**; its turn
+and growth columns are raw line counts and are inflated ~1.6-1.8x, as is every other pre-correction
+figure. The inflation applies roughly uniformly across models, so the *relative* spread between
+tiers stands, but do not quote its absolute numbers. Use it for the mechanism (turns → superlinear
+cost), never to justify a routing decision on its own.
 
 ### Finding 7 — the split model
 
-Using measured floor = 26,306 and g = 1,028, modelling an agent of `T` turns split into `k` agents
+Using measured floor = 26,820 and g = 2,235, modelling an agent of `T` turns split into `k` agents
 of `T/k` turns each, charging a 5,000-token handoff brief to each non-first agent:
 
 | Agent length | 1 agent | ×2 | ×4 | ×8 |
 |---|---|---|---|---|
-| 100 turns | 7.8M | 5.8M | 4.5M | 3.6M |
-| 300 turns | 54.3M | 32.7M | 21.1M | 15.0M |
-| 443 turns | 112.7M | 64.3M | 38.9M | 26.4M |
+| 50 turns | 4.2M | 3.0M | 2.2M | 1.9M |
+| 100 turns | 14.0M | 8.9M | 6.1M | 4.4M |
+| 200 turns | 50.3M | 28.9M | 17.8M | 12.2M |
+| 266 turns (worst observed) | 92.2M | 51.0M | 29.6M | 19.3M |
 
-Splitting the worst observed agent four ways is a **65%** cut; eight ways, **77%**.
+Splitting the worst observed agent four ways is a **68%** cut; eight ways, **79%**. These savings
+are *larger* than the uncorrected pass estimated, because per-turn growth is more than twice what
+naive counting implied.
 
 **Caveat:** this is an extrapolation. It assumes work divides cleanly and that 5k of handoff is
 sufficient re-establishment. If small agents need more, savings shrink — though the 26k floor
@@ -304,4 +336,5 @@ fail and lengthens the Beads port. The 26k floor makes it cheap in tokens, not i
 - Brief: each dispatch prompt contains only the briefs for areas its task touches, and each brief
   is under the cap.
 - Cost: `scripts/wf-cost.mjs` on a post-change run reports median turns per implementer
-  substantially below the 72-204 baseline recorded here, on a comparable plan.
+  substantially below the **58** baseline recorded here, on a comparable plan. The script must
+  deduplicate by `message.id`; a version that counts assistant lines will report ~1.7x the truth.

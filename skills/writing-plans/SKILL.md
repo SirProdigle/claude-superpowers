@@ -52,6 +52,13 @@ from brainstorming, so write it down once, here, instead of having every impleme
 3. Write one brief per area. If you have not actually read an area, dispatch one Explore subagent
    to read it and write the brief from what it reports — do not guess.
 
+**If the files genuinely will not cluster** — a plan that touches one file, or a scatter of
+unrelated paths with no shared module — do not invent areas to reach two. Fall back to **one brief
+for the whole plan**, under the same `## Code Areas` section as a single `### Area: whole-plan`,
+still capped at ~1500 tokens and still listed in the header and in every task's `"areas"`. Say
+plainly in the plan that the fallback was used and why, so a reader knows the single area is a
+deliberate outcome rather than a half-finished clustering step.
+
 **Cap each brief at ~1500 tokens.** This is a real constraint, not a style preference: the brief is
 inlined into every dispatch prompt for agents working in that area, so it is re-read on every turn
 of those agents. Measured, an 8000-token brief adds 2.5-10% to a run's cache-read volume. A tight

@@ -156,17 +156,17 @@ A bundle is a set of tasks handed to ONE implementer agent in ONE dispatch. Read
 `.tasks.json` — each task carries `blockedBy` and a `json:metadata` fence with `files[]` and
 `modelTier`.
 
-**The default is one task per bundle.** Measurement of 240 workflow agents found cost is the
-integral of context over turns, so it grows superlinearly with agent lifetime: the worst observed
-agent ran 443 turns and moved 208M tokens, 20% of its entire run. A fresh agent's floor is ~26k
-tokens. Merging tasks builds long agents; splitting them is close to free.
+**The default is one task per bundle.** Measurement of 128 workflow agents across four runs found
+cost is the integral of context over turns, so it grows superlinearly with agent lifetime: the
+worst observed agent ran 266 turns and carried 19% of its entire run's cost. A fresh agent's floor
+is ~27k tokens. Merging tasks builds long agents; splitting them is close to free.
 
 | Rule | Force | Why |
 |---|---|---|
-| One task = one bundle | **Default** | Agent lifetime is the dominant cost term. The floor for an extra agent is ~26k tokens; the marginal turn of a long agent costs 300-700k. |
+| One task = one bundle | **Default** | Agent lifetime is the dominant cost term. The floor for an extra agent is ~27k tokens; the marginal turn of a long agent costs 300-700k. |
 | Never merge tasks of different `modelTier` | Absolute | The bundle is one dispatch at one model. Mixing tiers means paying frontier for mechanical work, or worse, the reverse. |
 | Merge two tasks ONLY when all three hold: both trivially small, they share a file in `files[]`, AND they are joined by a direct `blockedBy` edge | Rare exception | All three together mean the second agent would otherwise re-derive the first's work immediately. Any one or two of them is not enough. |
-| Never merge more than 2 tasks into one bundle | Absolute | Three merged tasks is the shape that produced the 443-turn agent. |
+| Never merge more than 2 tasks into one bundle | Absolute | Three merged tasks is the shape that produced the 266-turn agent. |
 | A shared file creates a **notes-chain obligation**, not a merge | Mandatory | Implementation is sequential, so two agents never write one file concurrently. The real risk is the second agent not knowing the interface moved — which the notes chain fixes, at no cost in agent lifetime. |
 
 "Trivially small" is mechanical, not a judgment call: a task whose `files[]` has at most 2 entries
@@ -183,7 +183,7 @@ the default rule a bundle is usually exactly one task. "Bundle" and "unit" mean 
 
 Then order:
 
-- **Within a bundle** (only ever 2 tasks), list the blocking task first. Never numerically.
+- **Within a bundle** (at most 2 tasks), list the blocking task first. Never numerically.
 - **Across bundles**, emit them in an order where every bundle's dependencies appear earlier. The
   script implements bundles in array order and trusts it.
 
@@ -300,7 +300,10 @@ If a brief exceeds ~1500 tokens, cut it down here rather than passing it through
 no `## Code Areas` section (older plans), set `AREA = {}` and `areas: []` on every unit; the
 pipeline degrades to the previous behaviour rather than failing.
 
-Backticks inside a brief must be escaped for the template literal, or the script will not parse.
+Backticks **and `${`** inside a brief must be escaped for the template literal, or the script will
+not parse: an unescaped backtick ends the literal, and a `${VAR}` in the brief's prose either
+interpolates a variable the script does not have (a `ReferenceError` at launch) or silently
+substitutes one it does. Escape both as `` \` `` and `\${`.
 
 ### 6b. The reference script
 
@@ -342,8 +345,9 @@ const CTX = `Project conventions:
 Turn discipline — this is a hard cost constraint, not a style note. Every tool call is a turn, and
 a turn re-reads your whole accumulated context. Late turns cost 300-700k tokens each.
 - Batch shell work. Combine independent commands into ONE Bash call with && or ;.
-- Do NOT run the full test suite. Run ONLY the narrow test for your own task. Full verification is
-  a separate agent's job and it will happen.
+- Unless this prompt explicitly asks you for full verification, do NOT run the full test suite. Run
+  ONLY the narrow test for your own task. Full verification is a separate agent's job and it will
+  happen.
 - Never re-run a command to "check progress". Run it once, read the result.
 - Prefer one Read of a whole file over several greps around it.
 Do NOT run bd close.`;
@@ -381,6 +385,11 @@ const TESTRES = {
 
 // tier `null` = no model override, i.e. session level (used for the whole-plan review).
 const dispatch = (prompt, { tier, label, phase: ph, schema }) => {
+  // The script IS the enforcement: an unknown tier would make MODEL[tier] undefined, the spread
+  // omit `model`, and that unit silently run at session level. Fail loudly instead.
+  if (tier && !Object.prototype.hasOwnProperty.call(MODEL, tier)) {
+    throw new Error(`unknown tier "${tier}" for dispatch "${label}" — must be one of ${Object.keys(MODEL).join(", ")}`);
+  }
   const model  = tier ? MODEL[tier]  : null;
   const effort = tier ? EFFORT[tier] : null;
   log(`dispatch ${label} — tier=${tier ?? "session"} model=${model ?? "inherit"} ` +
@@ -440,7 +449,7 @@ any of your findings are acted on. Reporting them wastes a fix agent.
 Set unitId="${u.id}" on every finding. Set structural=true ONLY when the fix requires moving a
 boundary, removing cross-unit duplication, or replacing an abstraction.`,
     { tier: "standard", label: `review:${u.id}`, phase: "Review", schema: FINDINGS }
-  ).catch(() => null));
+  ).catch((e) => { log(`review:${u.id} failed: ${e}`); return null; }));
 }
 
 // ---- Gate: deterministic checks, once, at the cheapest tier. Runs before we read
@@ -466,7 +475,9 @@ Do NOT report anything a typechecker or linter catches.
 Leave unitId unset on findings that span units or belong to none. Set structural=true only per the
 schema's definition.`,
   { tier: null, label: "review:plan", phase: "Review", schema: FINDINGS }
-);
+// A rejection here would abort the run after every implementer, the gate and every per-unit
+// review has already been paid for. The consumer below already handles null.
+).catch((e) => { log(`review:plan failed: ${e}`); return null; });
 const findings = [
   ...perUnit.filter(Boolean).flatMap((r) => r.findings || []),
   ...((epicReview && epicReview.findings) || []),
@@ -621,7 +632,7 @@ Change the script freely; change these only with a reason you can say out loud.
 | Implementation is **sequential**, not parallel | Notes chain forward, which is what keeps conventions consistent across the plan. |
 | Each unit's review is **started inside the implement loop**, pinned to that unit's commits, and awaited after the loop | Removes the Implement→Review barrier without letting two agents write concurrently. Read-only prevents write collisions; pinning to commits is what stops a reviewer reading a tree later units are still rewriting. Rejections are isolated with `.catch` at push time. |
 | **Fixes stay sequential** | Unlike review, fixing writes files. Two fixers can collide on one file, and nothing in the plan guarantees disjointness. |
-| A deterministic **Gate** runs before any LLM review | A typechecker finds unused imports instantly and free. Letting an LLM find them instead costs a review slot, a routed fix agent and a re-verify. |
+| A deterministic **Gate** runs before we read any LLM review — i.e. before any finding is acted on | A typechecker finds unused imports instantly and free. Letting an LLM find them instead costs a review slot, a routed fix agent and a re-verify. |
 | Review is a **separate phase** from fixing (Full) | A reviewer that can also edit stops reviewing and starts fixing the first thing it sees. |
 | Per-unit review at `standard`, whole-plan at **session level** | Diff-anchored review is mid-tier work. The whole-plan pass is the one frontier judgment per plan — omit `model` so it inherits the session model. |
 | Fixes routed **by owning unit** | The unit's agent context is the only place the intent behind the code exists. |
@@ -647,7 +658,6 @@ Change the script freely; change these only with a reason you can say out loud.
 - `Promise.all` itself is fine for resume (unlike `Date.now()`/`new Date()`/`Math.random()`, which
   throw). It applies no concurrency cap of its own — that is a runtime property, not a `parallel()`
   one.
-- Concurrency is capped (~10-16 at a time); `parallel()` over every bundle is fine regardless.
 - **`budget.spent()` returns output tokens only** — roughly 5% of real cost. It is a progress
   signal, not a bill. Use `scripts/wf-cost.mjs` after the run for the real number.
 
@@ -689,6 +699,11 @@ for the cost report, and it is not recoverable from the returned summary.
 1. **Read the returned summary.** `greenAfterImpl: false` means the test loop exhausted its rounds
    and stopped with the branch intact — report `lastTestSummary` verbatim rather than digging
    through the run log, and do not close beads for work that is not green.
+   `greenAfterImpl: null` means the verifier returned nothing and the test state was never
+   established — treat it as unknown, NOT as green. Report `lastTestSummary` verbatim and do not
+   close beads. When `refactorSkipped` is null the refactor ran, so read `greenAfterRefactor` the
+   same way: `false` or `null` there means the tree was left red or unverified AFTER refactoring,
+   which is the state most likely to be mistaken for success.
 2. **Close the beads for completed bundles** — `bd close <id>` — from this skill and nowhere else.
    Leave anything unfinished `in_progress` so a resume can pick it up. When unsure whether a bead is
    still in the state you left it in, guard the transition:
@@ -697,13 +712,18 @@ for the cost report, and it is not recoverable from the returned summary.
 3. **Run the cost report** and include it in what you report back:
 
    ```bash
-   node ~/.claude/plugins/marketplaces/claude-superpowers/scripts/wf-cost.mjs <transcriptDir>
+   node ${CLAUDE_PLUGIN_ROOT}/scripts/wf-cost.mjs <transcriptDir>
    ```
 
-   Quote the totals line: agents, median turns per agent, and the top-20% cost share. Median turns
-   per agent is the number this pipeline is designed to hold down — a median above ~120 means units
-   are too large and the bundling in Step 3 was too generous. If `transcriptDir` is missing or the
-   script exits non-zero, say "cost report unavailable" and carry on; it is a report, not a gate.
+   If `${CLAUDE_PLUGIN_ROOT}` does not resolve in your shell, substitute the plugin's real install
+   path (wherever this skill's own directory lives) before running it.
+
+   Quote the summary lines: agents, median turns/agent, and the top-slice cost share (the script
+   prints the actual share of agents included, which exceeds 20% on small runs). Median turns per
+   agent is the number this pipeline is designed to hold down — a median materially above the
+   58-turn baseline this pipeline was tuned against means units are too large and the bundling in
+   Step 3 was too generous. If `transcriptDir` is missing or the script exits non-zero, say "cost
+   report unavailable" and carry on; it is a report, not a gate.
 
    The script's own `budget.spent()` log lines cover output tokens only, roughly 5% of real cost.
    Where the two disagree, the report is right.
@@ -721,7 +741,7 @@ for the cost report, and it is not recoverable from the returned summary.
 |---|---|
 | Redesigning the pipeline because you are writing the script anyway | You author the script so it fits *this plan*, not so you can reorder the phases. The order in 6b is the accumulated finding; 6c says why each part is there. |
 | Parallelising the Implement loop for speed | The notes chain is the mechanism that keeps conventions consistent. Parallel bundles get you an inconsistent codebase faster. |
-| Merging tasks to "save a dispatch" | A dispatch costs ~26k tokens. A merged agent's extra turns cost 300-700k each. You are trading a cheap thing for an expensive one. |
+| Merging tasks to "save a dispatch" | A dispatch costs ~27k tokens. A merged agent's extra turns cost 300-700k each. You are trading a cheap thing for an expensive one. |
 | Merging because two tasks share a file | Sequential implementation means there are no concurrent writers. Record the interface change in the notes chain instead. |
 | Merging across tiers | The bundle is one dispatch at one model. There is no way to run half of it cheaply. |
 | Letting agents close beads | Agents close on optimism, mid-run, before review and tests have spoken. The coordinator holds the only close. `Do NOT run bd close.` stays in `CTX` verbatim. |

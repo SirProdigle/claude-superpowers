@@ -11,17 +11,17 @@ upstream credit belongs to Jesse Vincent and the pcvelz maintainer.
 
 ## Orchestrated Execution — Optional Flow
 
-*Canonical design doc: [`docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md`](docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md). The section below is a reader-facing summary.*
+*Design history: [`docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md`](docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md) records the original script-driven design. It is superseded — the fixed scripts it specifies were removed on 2026-08-15 (see [Why there is no orchestrate.js](#why-there-is-no-orchestratejs)). The section below describes what actually runs.*
 
 `writing-plans` hands off to one of four options, not two. Alongside **Subagent-Driven** (fresh
 subagent per task, this session) and **Parallel Session** (separate worktree session), two
-**Orchestrated** options run the plan through a fixed Workflow-tool script
-(`scripts/orchestrate.js`) instead of a coordinator loop:
+**Orchestrated** options run the whole plan inside a single background Workflow instead of a
+coordinator loop:
 
 | Option | Pipeline |
 |---|---|
-| **Orchestrated — Simple** | Implement → one combined review-and-fix pass → bounded test loop |
-| **Orchestrated — Full** | Implement → per-bundle review + whole-plan review → routed fixes → test loop → refactor → test loop |
+| **Orchestrated — Simple** | Implement → deterministic gate → one combined review-and-fix pass → bounded test loop |
+| **Orchestrated — Full** | Implement (reviews overlapped) → deterministic gate → per-unit + whole-plan review → routed fixes → test loop → refactor *only on structural findings* → test loop |
 
 Pick Orchestrated when the plan is large enough to want a whole-epic review pass and a refactor
 step that `subagent-driven-development` has no phase for. Pick Simple over Full for a plan too
@@ -35,50 +35,82 @@ integration issues per-task review can't see), routes fixes back to the bundle t
 runs a refactor pass *after* the first green test loop, not before — refactoring unverified code
 makes it impossible to tell an implementation bug from a refactor bug.
 
-### Why the script enforces model routing, not a hook
+### Why there is no orchestrate.js
 
-The [Subagent Model Routing](#subagent-model-routing--optional-flow) hooks below do not fire here:
-`PreToolUse:Agent` does not trigger for a Workflow tool's internal `agent()` spawns. So
-`orchestrate.js` resolves every dispatch's tier to a model itself, refuses to start if any bundle
-is missing a tier, and logs the tier and resolved model on every dispatch as the audit trail the
-hook would otherwise produce.
+This flow originally shipped two scripts: a deterministic bundler (`bundle-plan.mjs`) that turned a
+plan's `.tasks.json` into a committed `.bundles.json` manifest, and a fixed pipeline script
+(`orchestrate.js`) that the skill fed a rigidly-shaped `args` object. Both were removed on
+2026-08-15.
+
+The scripts worked; the *contract* between them and the coordinator did not. Getting a run started
+meant clearing a chain of hard gates — bundler exit codes, a Beads port, rewriting integer task ids
+into bead ids, then an `validateArgs` pass that threw on mode, `ctx`, `epicId`, bundle ids, tiers,
+`taskIds` and bundle ordering. Runs died on the *shape of the input* far more often than on the
+work, and every one of those deaths was a coordinator marshalling data for a script that could not
+see the plan it was executing.
+
+So the skill now carries the pipeline as **guidance plus a reference script**, and the coordinator
+writes a Workflow script for the specific plan in front of it — bundles, bead ids and the resolved
+tier→model map baked in as literals. Nothing to marshal, no arg contract to violate, and a failed
+launch is a script edit away from a resume rather than a restart. What stayed fixed is the pipeline
+itself: sequential implementation with notes chained forward, review separated from fixing, fixes
+routed to the owning bundle, a bounded test loop, and refactor only after the first green.
+
+Model routing is resolved inside that script rather than by the
+[Subagent Model Routing](#subagent-model-routing--optional-flow) hooks below, because
+`PreToolUse:Agent` does not fire for a Workflow tool's internal `agent()` spawns. The script's own
+tier lookup and its per-dispatch log line are the entire audit trail the hook would otherwise
+produce.
 
 ### Bundling
 
-`scripts/bundle-plan.mjs` turns a plan's `.tasks.json` into a `.bundles.json` manifest: it never
-merges tasks across `modelTier`, and within a tier it merges only on real coupling — overlapping
-`files[]` or a direct `blockedBy` edge. There is deliberately no third rule that packs same-tier
-tasks together just for being small; an earlier version of this design had one, and it turned out
-to fabricate dependency cycles between otherwise-unrelated bundles, so it was removed. Bundles are
-capped at 5 tasks or 15 files (whichever binds first, both overridable) — a breach is treated as a
-plan defect and the script exits non-zero naming the tasks and files responsible, rather than
-silently shipping an oversized bundle. Within a bundle, `taskIds` are ordered topologically by the
-tasks' own `blockedBy` graph (ties broken by ascending id), not numerically, so a bundle never
-lists a task before the one that blocks it.
+A bundle is the set of tasks handed to one implementer agent in one dispatch, and **the default is
+one task per bundle.** Measurement of 240 workflow agents found that cost is the integral of
+context over turns — every turn re-reads the agent's whole accumulated context — so it grows
+superlinearly with agent lifetime. The worst agent observed ran 443 turns and moved 208M tokens,
+20% of its entire run, while a fresh agent's floor is only ~26k. Splitting is cheap; merging is
+not.
+
+Two tasks merge only when all three of these hold: both are trivially small (≤2 files, small
+scope), they share a file, and a direct `blockedBy` edge joins them. Never across `modelTier`, and
+never more than two tasks. An earlier version made shared files a *mandatory* merge on the grounds
+that two agents would clobber one file — but implementation is sequential and there are no
+concurrent writers, so that rule bought nothing and built long agents. A shared file is now a
+notes-chain obligation instead: the earlier task must report any interface it changed.
 
 ### Model tiers
 
 Tasks in `writing-plans` carry a `modelTier` of `mechanical`, `standard`, or `frontier` (see
-[The tiers](#the-tiers) below). `orchestrate.js` itself never sees or names a concrete model — it's
-a Workflow-tool script with no filesystem access, so it only ever evaluates a tier against a
-`routing` object it's handed in `args`. The `orchestrating-execution` skill is what reads
+[The tiers](#the-tiers) below). The `orchestrating-execution` skill reads
 `docs/superpowers/model-routing.json` (project path first, falling back to
-`~/.claude/superpowers/model-routing.json`) and passes the parsed object through. A routing file
-might map `mechanical → sonnet`, `standard → opus`, `frontier → fable` — as an *example*, not this
-repo's actual config, since no such file is checked in here; `/onboard` writes the real one for
-your project.
+`~/.claude/superpowers/model-routing.json`) and copies the mapping into the script it writes; a
+tier mapped to `"inherit"` means the dispatch omits the `model` option and runs at session level.
+Model ids live in that file and nowhere else — not in the skill, not in this README. If neither
+routing file exists the skill stops rather than guessing what a tier means; `/onboard` writes one
+for your project.
+
+### Cost reporting
+
+Every orchestrated run ends with a real cost number. `scripts/wf-cost.mjs` reads the run's
+`agent-*.jsonl` transcripts and reports turns, context growth and a cost index per agent, plus the
+share carried by the most expensive fifth of agents. `orchestrating-execution` runs it in Step 8.
+Median turns per agent is the number the pipeline is tuned to hold down — above ~120 means the
+bundling was too generous.
+
+```bash
+node scripts/wf-cost.mjs <transcriptDir>
+```
 
 ### Tracking: Beads, not Backlog.md
 
 `writing-plans` still creates native tasks as the plan-time artifact, but the durable record of an
 orchestrated run is [Beads](https://github.com/steveyegge/beads) (`bd`): the plan is ported into a
 Beads epic before the workflow launches. This fork's earlier Backlog.md-based epic layer has been
-removed in favor of `bd`. If `bd` isn't on `PATH` or `.beads/` doesn't exist,
-the handoff asks whether to run `bd init`, continue untracked (a degraded path — no durable
-record, and `bd show`-shaped prompts still get sent to agents that have no `bd`), or cancel.
-
-If the routing file from the previous section is missing entirely (neither project nor user path),
-the skill stops rather than guessing which model a tier means.
+removed in favor of `bd`. If `.beads/` doesn't exist but `bd` is on `PATH`, the skill runs `bd init`
+itself and says so — a missing tracker in a repo that can have one is a setup gap, not a decision.
+If `bd` isn't installed at all, it stops and hands the choice back, since it can't install it and
+shouldn't guess a package manager. Running untracked is possible but degraded — no durable record
+and no `/complete-epic` afterwards — and is offered only if you ask for it.
 
 ### Closing an epic
 

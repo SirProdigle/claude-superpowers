@@ -1,7 +1,22 @@
 # Orchestrated Execution — Design
 
-**Status:** approved
+**Status:** SUPERSEDED 2026-08-15 — historical record, do not implement from this document
 **Date:** 2026-08-13
+
+> **Superseded.** `scripts/bundle-plan.mjs`, `scripts/orchestrate.js` and their tests were deleted
+> on 2026-08-15. The arg contract between the coordinator and the fixed script was aborting runs
+> more often than the work itself was, so the pipeline moved into `skills/orchestrating-execution`
+> as guidance plus a reference script that the coordinator adapts and launches inline per plan.
+> The *pipeline* below (phases, tier roles, bundling rules, bounded test loop, refactor-after-green)
+> is still current and is restated in the skill; the *mechanism* sections — bundler CLI, manifest
+> file, `validateArgs`, `args` shape, `scriptPath` launch, task-id rewriting — describe code that
+> no longer exists. See "Why there is no orchestrate.js" in the README.
+>
+> **Superseded again, 2026-08-15**, on bundling and pipeline shape, by
+> `2026-08-15-orchestration-cost-redesign-design.md`. That document measures 240 real workflow
+> agents and finds cost is the integral of context over turns; the "merge on coupling" bundling
+> below and the unconditional refactor stage are both reversed there. The Beads integration, tier
+> roles and bounded test loop still stand.
 
 A third execution option at the plan handoff, alongside Subagent-Driven and Parallel Session.
 Orchestrated runs an implementation plan through a fixed, versioned Workflow-tool script:

@@ -37,6 +37,49 @@ Before defining tasks, map out which files will be created or modified and what 
 
 This structure informs the task decomposition. Each task should produce self-contained changes that make sense independently.
 
+## Code Areas
+
+Execution agents are deliberately short-lived — cost grows superlinearly with an agent's lifetime,
+so an implementer gets one task and is discarded. A short agent that has to rediscover the codebase
+is both expensive and error-prone. The plan closes that gap: you already hold this understanding
+from brainstorming, so write it down once, here, instead of having every implementer re-derive it.
+
+**Produce them like this:**
+
+1. Take the union of `files[]` across every task in this plan.
+2. Cluster those paths into **2-5 code areas** — a package, a module, a layer. Name each area with
+   a short slug (`sim-core`, `ui`, `hooks`).
+3. Write one brief per area. If you have not actually read an area, dispatch one Explore subagent
+   to read it and write the brief from what it reports — do not guess.
+
+**Cap each brief at ~1500 tokens.** This is a real constraint, not a style preference: the brief is
+inlined into every dispatch prompt for agents working in that area, so it is re-read on every turn
+of those agents. Measured, an 8000-token brief adds 2.5-10% to a run's cache-read volume. A tight
+brief pays for itself; a bloated one is a permanent tax.
+
+**Each brief contains exactly:**
+
+- the 5-8 files that matter in this area, one line each on what that file owns
+- the interfaces and contracts that must not change
+- invariants that hold across the area
+- where this area's tests live
+
+**And never contains:** code dumps, exhaustive API listings, anything an agent could cheaply grep
+for, or restatement of the tasks.
+
+**Write them into the plan document** under a top-level `## Code Areas` section, one `### Area:
+<slug>` subsection each, placed after the task list. Then list the slugs in the header's
+**Code Areas:** field.
+
+**Assign areas to tasks.** Every task's `json:metadata` fence gains an `"areas"` key listing the
+slugs that task touches — usually one, occasionally two. Execution controllers use it to decide
+which briefs to hand each agent.
+
+**Staleness is handled by the notes chain, not by you.** The brief describes structure as of plan
+time; earlier tasks will change some of it. That is expected and safe because every implementer is
+required to report any interface it changed. Do not try to predict the end state — describe what is
+there now.
+
 ## REQUIRED FIRST STEP: Initialize Task Tracking
 
 **BEFORE exploring code or writing the plan, you MUST:**
@@ -78,6 +121,8 @@ Key principle: TDD cycles happen WITHIN tasks, not as separate tasks. A task is 
 **Architecture:** [2-3 sentences about approach]
 
 **Tech Stack:** [Key technologies/libraries]
+
+**Code Areas:** [Comma-separated area slugs, defined in the `## Code Areas` section below. "none" for single-file plans.]
 
 **Global Constraints:** [Binding requirements every task must respect — exact values, formats, cross-component relationships ("same layout as X", "matches Y"). Execution controllers hand these to every reviewer. "none" if none.]
 
@@ -332,7 +377,7 @@ TaskCreate:
     **Verify:** [From task's Verify line]
 
     ```json:metadata
-    {"files": ["path/to/file1.py"], "verifyCommand": "pytest tests/path/ -v", "acceptanceCriteria": ["criterion 1", "criterion 2"], "modelTier": "mechanical"}
+    {"files": ["path/to/file1.py"], "verifyCommand": "pytest tests/path/ -v", "acceptanceCriteria": ["criterion 1", "criterion 2"], "modelTier": "mechanical", "areas": ["area-slug"]}
     ```
   activeForm: "Implementing [Component Name]"
 ```

@@ -480,13 +480,14 @@ Return which findings you fixed and which you rejected, with reasons.`,
 }
 const cross = findings.filter((f) => !f.unitId || !UNITS.some((u) => u.id === f.unitId));
 if (cross.length) {
-  await dispatch(
+  const cr = await dispatch(
     `Apply these cross-cutting review findings for epic ${EPIC} — they span units or belong to
 none. Verify each first. Run only the tests covering what you touched, then commit as
 "${EPIC}: cross-cutting fixes".
 ${cross.map(fmt).join("\n")}`,
     { tier: "standard", label: "fix:cross-cutting", phase: "Fixes" }
   );
+  fixNotes.push(`cross-cutting: ${cr || "(fixer returned nothing)"}`);
 }
 
 // ---- Test loop: verify at mechanical, fix at standard, escalate once, max 2 fix rounds.
@@ -514,11 +515,16 @@ ${res ? res.summary : "test agent returned nothing — run the suite yourself an
   // The second fix ran at the escalated tier and was never re-verified. Without this a tree that
   // IS green gets reported red, which silently cancels Refactor. One extra verification, not a
   // third fix round.
-  const final = await verify(`${round}:final`);
+  const final = await verify(`test:${round}:final`);
   if (final && final.pass) { lastTestSummary = null; return true; }
   // null is not false: nobody established the tree is red, so do not report it as red.
-  if (!final) { lastTestSummary = "(verifier returned nothing — test state unknown)"; return null; }
+  if (!final) {
+    lastTestSummary = "(verifier returned nothing — test state unknown)";
+    log(`test loop (${round}): verifier returned nothing — test state unknown, branch left intact`);
+    return null;
+  }
   lastTestSummary = final.summary || "(test agent returned no summary)";
+  log(`test loop exhausted after 2 fix rounds (${round}) — stopping, branch left intact`);
   return false;
 };
 

@@ -97,8 +97,8 @@ Your human partner already chose at the handoff:
 
 | Handoff option | Pipeline |
 |---|---|
-| Orchestrated — Simple | Implement → one combined review-and-fix pass → test loop |
-| Orchestrated — Full | Implement → per-bundle + whole-plan review → routed fixes → test loop → refactor → test loop |
+| Orchestrated — Simple | Implement → deterministic gate → one combined review-and-fix pass → bounded test loop |
+| Orchestrated — Full | Implement (reviews overlapped) → deterministic gate → per-unit + whole-plan review → routed fixes → test loop → refactor *only on structural findings* → test loop |
 
 Do not ask which mode; it was chosen. The mode decides which phases you write into the script — in
 Simple mode you simply omit the Review and Refactor blocks rather than branching on a variable.
@@ -187,12 +187,11 @@ Then order:
 - **Across bundles**, emit them in an order where every bundle's dependencies appear earlier. The
   script implements bundles in array order and trusts it.
 
-**If you cannot produce an acyclic bundle order**, do not force it. The usual cause is real: two
-same-tier tasks share a file while a task of a *different* tier sits between them in the dependency
-chain, so the mandatory merge creates a cycle at bundle level that does not exist between the tasks.
-Say exactly that to your human partner and name the tasks and the shared file. The remedy is a plan
-change — split the file's usage so one task owns it, or retier the chain — and it is their call, not
-yours.
+**If you cannot produce an acyclic bundle order**, do not force it. With one task per bundle the
+bundle graph is isomorphic to the task graph, so a cycle at bundle level means a cycle in the
+plan's own `blockedBy` edges — or that a merge you made pulled a dependency backwards. Say
+exactly that to your human partner and name the tasks involved. The remedy is a plan change —
+break the dependency cycle, or split the merge you made — and it is their call, not yours.
 
 ## Step 4: Show the bundling
 
@@ -314,6 +313,7 @@ const EFFORT = { mechanical: "low", standard: "medium", frontier: "inherit" };
 // Area briefs from the plan's Code Areas section. Cap each at ~1500 tokens.
 const AREA = {
   "sim-core": `<the plan's brief for this area, verbatim>`,
+  "ui":       `<the plan's brief for this area, verbatim>`,
 };
 
 const CTX = `Project conventions:
@@ -376,7 +376,7 @@ const dispatch = (prompt, { tier, label, phase: ph, schema }) => {
   });
 };
 
-const briefFor = (u) => u.areas.map((a) => `### Area: ${a}\n${AREA[a] || "(no brief)"}`).join("\n\n");
+const briefFor = (u) => (u.areas || []).map((a) => `### Area: ${a}\n${AREA[a] || "(no brief)"}`).join("\n\n");
 
 // ---- Implement: sequential (the notes chain needs it), but each unit's review is
 // started immediately and left running while the next unit implements. That removes
@@ -405,20 +405,25 @@ brief.`,
   notes.push(`${u.id} (${u.beads.join(",")}): ${r || "(agent returned nothing)"}`);
 
   // Not awaited: this review runs while the next unit implements.
+  // .catch at PUSH time, not at collection. The collection point is hours away, and until
+  // something handles it a rejected promise is an unhandled rejection. Promise.all is also
+  // fail-fast: without this, one failed reviewer discards every other review.
   reviewPromises.push(dispatch(
     `Review the commits for beads task(s) ${u.beads.join(", ")} (unit ${u.id}). Read each task,
-find its commits, read the touched code in full.
+then review THIS UNIT'S COMMITS — use \`git show\`/\`git diff\` over them, NOT the current working
+tree. Later units and the gate agent are committing while you read; the working tree is not what
+you are reviewing.
 
 Report REAL defects of DESIGN and CORRECTNESS only: logic errors, acceptance criteria not met,
 broken or missing tests, unsafe assumptions, duplicated logic.
 Do NOT report anything a typechecker or linter catches — unused imports, formatting, missing type
-annotations, obvious null checks. A separate deterministic gate already handled those. Reporting
-them wastes a fix agent.
+annotations, obvious null checks. A deterministic typecheck/lint gate runs on this branch before
+any of your findings are acted on. Reporting them wastes a fix agent.
 
 Set unitId="${u.id}" on every finding. Set structural=true ONLY when the fix requires moving a
 boundary, removing cross-unit duplication, or replacing an abstraction.`,
     { tier: "standard", label: `review:${u.id}`, phase: "Review", schema: FINDINGS }
-  ));
+  ).catch(() => null));
 }
 
 // ---- Gate: deterministic checks, once, at the cheapest tier. Runs before we read
@@ -450,15 +455,19 @@ const findings = [
   ...((epicReview && epicReview.findings) || []),
 ];
 log(`${findings.length} review findings (${findings.filter((f) => f.structural).length} structural)`);
+// A finding with no `structural` key is falsy but is NOT a claim that it is non-structural.
+const missingFlag = findings.filter((f) => f.structural === undefined).length;
+if (missingFlag) log(`WARNING: ${missingFlag} finding(s) missing the structural flag — counted as non-structural`);
 
 // ---- Fixes: routed to the unit that owns them, sequential. Sequential because two
 // fixers could otherwise write the same file — unlike review, fixing is not read-only.
 phase("Fixes");
 const fmt = (f) => `- [${f.severity}] ${f.file}: ${f.issue}`;
+const fixNotes = [];
 for (const u of UNITS) {
   const own = findings.filter((f) => f.unitId === u.id);
   if (!own.length) continue;
-  await dispatch(
+  const fr = await dispatch(
     `Apply these review findings for unit ${u.id}. Verify each against the code first — skip any
 that are wrong. Run only the tests covering what you touched, then commit as
 "${EPIC}: fixes ${u.id}".
@@ -467,6 +476,7 @@ ${own.map(fmt).join("\n")}
 Return which findings you fixed and which you rejected, with reasons.`,
     { tier: "standard", label: `fix:${u.id}`, phase: "Fixes" }
   );
+  fixNotes.push(`${u.id}: ${fr || "(fixer returned nothing)"}`);
 }
 const cross = findings.filter((f) => !f.unitId || !UNITS.some((u) => u.id === f.unitId));
 if (cross.length) {
@@ -504,10 +514,11 @@ ${res ? res.summary : "test agent returned nothing — run the suite yourself an
   // The second fix ran at the escalated tier and was never re-verified. Without this a tree that
   // IS green gets reported red, which silently cancels Refactor. One extra verification, not a
   // third fix round.
-  const final = await verify(`test:${round}:final`);
+  const final = await verify(`${round}:final`);
   if (final && final.pass) { lastTestSummary = null; return true; }
-  lastTestSummary = (final && final.summary) || "(test agent returned no summary)";
-  log(`test loop exhausted after 2 fix rounds (${round}) — stopping, branch left intact`);
+  // null is not false: nobody established the tree is red, so do not report it as red.
+  if (!final) { lastTestSummary = "(verifier returned nothing — test state unknown)"; return null; }
+  lastTestSummary = final.summary || "(test agent returned no summary)";
   return false;
 };
 
@@ -519,7 +530,9 @@ const structural = findings.filter(
 );
 let greenAfterRefactor = null;
 let refactorSkipped = null;
-if (!greenAfterImpl) {
+if (greenAfterImpl === null) {
+  refactorSkipped = "test state unknown — verifier returned nothing";
+} else if (greenAfterImpl === false) {
   refactorSkipped = "tree not green";
 } else if (!structural.length) {
   refactorSkipped = "no major/critical structural findings";
@@ -529,6 +542,12 @@ if (!greenAfterImpl) {
     `Refactor planning for epic ${EPIC}. Do NOT change any code. Address EXACTLY these structural
 findings and nothing else — this is not a general cleanup pass:
 ${structural.map(fmt).join("\n")}
+
+What the fix agents already reported doing:
+${fixNotes.length ? fixNotes.join("\n") : "(none)"}
+
+If a finding above is already resolved, say so and OMIT it from the plan. If everything is already
+clean, say so and return a minimal plan — do not invent work.
 
 Read the code around them, then produce a concrete ORDERED plan with file-level instructions an
 implementer can execute without judgment calls.`,
@@ -555,7 +574,9 @@ return {
 **Simple mode** keeps Implement, Gate and Test. It deletes the Review and Refactor blocks (and
 `reviewPromises`, `findings`, `fmt`, `cross`, `structural`) and replaces the whole Fixes phase with
 one pass. The Gate phase stays — it is the cheapest quality step in the pipeline and it is what
-lets the combined pass concentrate on design.
+lets the combined pass concentrate on design. Simple mode also has no findings array, so drop
+`findings`, `structuralFindings` and `refactorSkipped` from the `return` object. Leaving them
+referenced throws a `ReferenceError` at the end of the run, after every agent has been paid for.
 
 ```js
 phase("Fixes");
@@ -575,16 +596,16 @@ Change the script freely; change these only with a reason you can say out loud.
 | Decision | Reason |
 |---|---|
 | Implementation is **sequential**, not parallel | Notes chain forward, which is what keeps conventions consistent across the plan. |
-| Each unit's review is **started inside the implement loop** and awaited after it | Removes the Implement→Review barrier — unit 1 reviews while unit 3 implements — without letting two agents write concurrently. Review is read-only; that is what makes overlapping it safe. |
+| Each unit's review is **started inside the implement loop**, pinned to that unit's commits, and awaited after the loop | Removes the Implement→Review barrier without letting two agents write concurrently. Read-only prevents write collisions; pinning to commits is what stops a reviewer reading a tree later units are still rewriting. Rejections are isolated with `.catch` at push time. |
 | **Fixes stay sequential** | Unlike review, fixing writes files. Two fixers can collide on one file, and nothing in the plan guarantees disjointness. |
 | A deterministic **Gate** runs before any LLM review | A typechecker finds unused imports instantly and free. Letting an LLM find them instead costs a review slot, a routed fix agent and a re-verify. |
 | Review is a **separate phase** from fixing (Full) | A reviewer that can also edit stops reviewing and starts fixing the first thing it sees. |
-| Per-unit review at `standard`, whole-plan at **session level** | Diff-anchored review is mid-tier work. The whole-plan pass is the one frontier judgment per plan. |
+| Per-unit review at `standard`, whole-plan at **session level** | Diff-anchored review is mid-tier work. The whole-plan pass is the one frontier judgment per plan — omit `model` so it inherits the session model. |
 | Fixes routed **by owning unit** | The unit's agent context is the only place the intent behind the code exists. |
 | Implementers run **only their own narrow tests** | Measured: Bash is 78% of tool calls, dominated by repeated suite runs. Each is a turn costing 300-700k late in an agent's life. Full verification is one fresh cheap agent instead. |
 | Test loop is **bounded** (2 fix rounds + a final verify) then stops | An unbounded loop burns a night on an unfixable failure. |
 | Refactor runs **only on major/critical structural findings**, after green | Refactoring code that just passed review and tests pays a long-lived writing agent plus a second test loop to rediscover a design that already worked. The `structural` flag makes the trigger mechanical rather than a re-judgment. |
-| `effort` is passed on **every** dispatch | An agent's own output is 50-75% of its context growth, and thinking tokens are output. Effort compounds into context, not just per-turn price. |
+| `effort` is resolved centrally in `dispatch()` | An agent's own output is a large share of its context growth, and thinking tokens are output. Tiers mapped to `"inherit"` — and the session-level whole-plan pass — deliberately pass no `effort`. |
 | Routing is resolved **in the script**, not by a hook | `PreToolUse:Agent` hooks do not fire for Workflow `agent()` spawns (measured 2026-08-13). |
 
 ### 6d. Workflow-script constraints that bite
@@ -595,10 +616,15 @@ Change the script freely; change these only with a reason you can say out loud.
   interpolation. Any other `export` is a SyntaxError inside the wrapped function body.
 - **Top-level `return` is required** to surface the result; that is why the file is not importable.
 - **`Date.now()`, `new Date()` and `Math.random()` throw.** They would break resume.
-- `parallel()` resolves a failed thunk to `null` — `.filter(Boolean)` before using results.
+- **`parallel()` and `Promise.all` fail differently, and the difference is load-bearing.**
+  `parallel()` resolves a failed thunk to `null`; `Promise.all` is **fail-fast** — one rejection
+  discards every sibling result and throws at the collection point. If you hold un-awaited promises
+  across loop iterations, attach `.catch(() => null)` at creation, both to restore null-on-failure
+  and because an un-awaited rejected promise is an unhandled rejection until something collects it.
+- `Promise.all` itself is fine for resume (unlike `Date.now()`/`new Date()`/`Math.random()`, which
+  throw). It applies no concurrency cap of its own — that is a runtime property, not a `parallel()`
+  one.
 - Concurrency is capped (~10-16 at a time); `parallel()` over every bundle is fine regardless.
-- **`Promise.all` is fine**; `Date.now()`/`new Date()`/`Math.random()` are not. The overlapped-review
-  pattern relies on holding un-awaited promises across loop iterations, which is supported.
 - **`budget.spent()` returns output tokens only** — roughly 5% of real cost. It is a progress
   signal, not a bill. Use `scripts/wf-cost.mjs` after the run for the real number.
 

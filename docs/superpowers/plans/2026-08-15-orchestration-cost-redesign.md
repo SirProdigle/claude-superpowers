@@ -53,9 +53,21 @@
 - [ ] The string `Two agents writing one file clobber each other` no longer appears anywhere in the file
 - [ ] The Anti-Patterns row about merging small tasks is replaced by one about over-merging
 - [ ] A Red Flag exists for bundling more than 2 tasks
-- [ ] §4's table description mentions unit count and tier rather than "the files that forced each merge"
+- [ ] §4's table description names bundle id, tier, task ids and the merge conditions, rather than "the files that forced each merge" (corrected 2026-08-15: the original criterion said "unit count", which the mandated §4 sentence never contained)
 
-**Verify:** `grep -c 'notes-chain obligation' skills/orchestrating-execution/SKILL.md` → `1` or more, and `! grep -q 'clobber each other' skills/orchestrating-execution/SKILL.md`
+**Verify:**
+
+```bash
+F=skills/orchestrating-execution/SKILL.md
+grep -q 'One task = one bundle' $F && grep -q 'notes-chain obligation' $F \
+  && grep -q 'more than 2 tasks in one bundle' $F \
+  && ! grep -q 'Not negotiable' $F && echo TASK1_OK
+```
+
+> **Errata 2026-08-15.** This originally asserted `! grep -q 'clobber each other'`. That can never
+> pass: Step 1's own mandated text quotes the phrase in the sentence explaining why the old rule was
+> removed. `Not negotiable` is the correct negative probe — it was the old rule's tagline and appears
+> nowhere in the replacement. Do not delete the historical sentence to satisfy a grep.
 
 **Steps:**
 
@@ -525,6 +537,149 @@ git commit -m "orchestrating-execution: turn discipline, pre-review gate, condit
 ```json:metadata
 {"files": ["skills/orchestrating-execution/SKILL.md"], "verifyCommand": "cd ~/projects/claude-superpowers && SEC=$(awk '/^### 6b\\./,/^### 6c\\./' skills/orchestrating-execution/SKILL.md); echo \"$SEC\" | grep -q 'Turn discipline' && echo \"$SEC\" | grep -q 'structural' && echo \"$SEC\" | grep -q 'reviewPromises' && echo \"$SEC\" | grep -q 'Do NOT run bd close.' && ! echo \"$SEC\" | grep -qE 'Date\\.now\\(\\)|Math\\.random\\(\\)' && echo TASK2_OK", "acceptanceCriteria": ["CTX has a Turn discipline block and still ends with 'Do NOT run bd close.'", "FINDINGS schema has a structural boolean", "implementers run only their own narrow tests", "Gate phase runs typecheck+lint at mechanical tier before Review", "review dispatches started in the implement loop, awaited after", "refactor conditional on structural findings, logs skip reason", "every dispatch passes effort", "no Date.now/new Date/Math.random in the script"], "modelTier": "standard", "estimatedScope": "medium"}
 ```
+
+---
+
+### Task 2 — Errata (2026-08-15, post-review)
+
+Task 2's implementation was byte-perfect against the brief. The **brief was wrong**. Review read the
+mandated script as a program and found eight defects, two run-fatal. The owner ruled: fix all of
+them and amend the plan. These corrections supersede the corresponding lines of Task 2's script.
+
+**E1 (run-fatal) — isolate review rejections at push time.**
+`Promise.all` is fail-fast, and an un-awaited promise has no rejection handler until it is collected
+— hours later. One failed reviewer would abort the run after all implementation was paid for, and
+the pending rejection is process-fatal on Node's default `unhandledRejection`. `.filter(Boolean)`
+was dead code under `Promise.all`; this restores it.
+
+```js
+  // .catch at PUSH time, not at collection. The collection point is hours away, and until
+  // something handles it a rejected promise is an unhandled rejection. Promise.all is also
+  // fail-fast: without this, one failed reviewer discards every other review.
+  reviewPromises.push(dispatch(
+    `Review the commits for beads task(s) ${u.beads.join(", ")} (unit ${u.id}). Read each task,
+then review THIS UNIT'S COMMITS — use \`git show\`/\`git diff\` over them, NOT the current working
+tree. Later units and the gate agent are committing while you read; the working tree is not what
+you are reviewing.
+
+Report REAL defects of DESIGN and CORRECTNESS only: logic errors, acceptance criteria not met,
+broken or missing tests, unsafe assumptions, duplicated logic.
+Do NOT report anything a typechecker or linter catches — unused imports, formatting, missing type
+annotations, obvious null checks. A deterministic typecheck/lint gate runs on this branch before
+any of your findings are acted on. Reporting them wastes a fix agent.
+
+Set unitId="${u.id}" on every finding. Set structural=true ONLY when the fix requires moving a
+boundary, removing cross-unit duplication, or replacing an abstraction.`,
+    { tier: "standard", label: `review:${u.id}`, phase: "Review", schema: FINDINGS }
+  ).catch(() => null));
+```
+
+That single replacement also carries **E3** (the prompt no longer claims a gate has already run —
+reviewers are dispatched before `phase("Gate")`, so the old wording was false when read) and **E4**
+(reviewers are pinned to their own unit's commits instead of a working tree other agents are
+actively rewriting).
+
+**E2 (run-fatal) — Simple mode's return.** Append to the Simple-mode paragraph:
+
+> Simple mode also has no findings array, so drop `findings`, `structuralFindings` and
+> `refactorSkipped` from the `return` object. Leaving them referenced throws a `ReferenceError` at
+> the end of the run, after every agent has been paid for.
+
+**E5 — capture what the fixers did, and let the refactor planner skip resolved work.**
+Structural findings are routed to `standard` fixers in Fixes, then handed to a `frontier` planner
+from the same unfiltered list. Fix-agent returns were awaited and discarded.
+
+```js
+const fixNotes = [];
+// ...inside the per-unit fix loop, replace the bare `await dispatch(...)`:
+  const fr = await dispatch(/* ...unchanged prompt... */);
+  fixNotes.push(`${u.id}: ${fr || "(fixer returned nothing)"}`);
+```
+
+and in the refactor-planning prompt, after the findings list:
+
+```js
+`What the fix agents already reported doing:
+${fixNotes.length ? fixNotes.join("\n") : "(none)"}
+
+If a finding above is already resolved, say so and OMIT it from the plan. If everything is already
+clean, say so and return a minimal plan — do not invent work.`
+```
+
+**E6 — distinguish absent from false.** A finding missing `structural` is falsy, so Refactor is
+skipped while logging a reason that is factually wrong about why. Same misattribution when the
+verifier returns nothing: the tree is reported red though nobody established it was.
+
+```js
+const missingFlag = findings.filter((f) => f.structural === undefined).length;
+if (missingFlag) log(`WARNING: ${missingFlag} finding(s) missing the structural flag — counted as non-structural`);
+```
+
+In `testLoop`, distinguish unknown from red:
+
+```js
+  const final = await verify(`${round}:final`);
+  if (final && final.pass) { lastTestSummary = null; return true; }
+  if (!final) { lastTestSummary = "(verifier returned nothing — test state unknown)"; return null; }
+  lastTestSummary = final.summary || "(test agent returned no summary)";
+  return false;
+```
+
+and at the refactor gate:
+
+```js
+if (greenAfterImpl === null)      refactorSkipped = "test state unknown — verifier returned nothing";
+else if (greenAfterImpl === false) refactorSkipped = "tree not green";
+else if (!structural.length)       refactorSkipped = "no major/critical structural findings";
+else { /* ...run refactor... */ }
+```
+
+**E7 — §6d's concurrency bullets.** Replace the `parallel()` bullet and the `Promise.all` bullet with:
+
+```markdown
+- **`parallel()` and `Promise.all` fail differently, and the difference is load-bearing.**
+  `parallel()` resolves a failed thunk to `null`; `Promise.all` is **fail-fast** — one rejection
+  discards every sibling result and throws at the collection point. If you hold un-awaited promises
+  across loop iterations, attach `.catch(() => null)` at creation, both to restore null-on-failure
+  and because an un-awaited rejected promise is an unhandled rejection until something collects it.
+- `Promise.all` itself is fine for resume (unlike `Date.now()`/`new Date()`/`Math.random()`, which
+  throw). It applies no concurrency cap of its own — that is a runtime property, not a `parallel()`
+  one.
+```
+
+**E8 — the Step 2 mode table** (~190 lines above the script it now contradicts; no other task covers
+it). Replace both rows:
+
+```markdown
+| Orchestrated — Simple | Implement → deterministic gate → one combined review-and-fix pass → bounded test loop |
+| Orchestrated — Full | Implement (reviews overlapped) → deterministic gate → per-unit + whole-plan review → routed fixes → test loop → refactor *only on structural findings* → test loop |
+```
+
+**E9 — §6c rows that overclaim.** Narrow the safety claim and restore the actionable half:
+
+```markdown
+| Each unit's review is **started inside the implement loop**, pinned to that unit's commits, and awaited after the loop | Removes the Implement→Review barrier without letting two agents write concurrently. Read-only prevents write collisions; pinning to commits is what stops a reviewer reading a tree later units are still rewriting. Rejections are isolated with `.catch` at push time. |
+| Per-unit review at `standard`, whole-plan at **session level** | Diff-anchored review is mid-tier work. The whole-plan pass is the one frontier judgment per plan — omit `model` so it inherits the session model. |
+| `effort` is resolved centrally in `dispatch()` | An agent's own output is a large share of its context growth, and thinking tokens are output. Tiers mapped to `"inherit"` — and the session-level whole-plan pass — deliberately pass no `effort`. |
+```
+
+**E10 — two guards in the template.** `briefFor` must tolerate a unit with no `areas`, and the
+template's `AREA` map must define every area its example units reference:
+
+```js
+const AREA = {
+  "sim-core": `<the plan's brief for this area, verbatim>`,
+  "ui":       `<the plan's brief for this area, verbatim>`,
+};
+const briefFor = (u) => (u.areas || []).map((a) => `### Area: ${a}\n${AREA[a] || "(no brief)"}`).join("\n\n");
+```
+
+**Acceptance for the errata:** `reviewPromises.push(` is followed by a `.catch(`; the reviewer prompt
+contains `NOT the current working tree`; the Simple-mode paragraph names all three return keys to
+drop; `fixNotes` exists and is interpolated into the refactor prompt; `missingFlag` is logged;
+`testLoop` can return `null` and the refactor gate has three distinct skip reasons; §6d describes
+`Promise.all` as fail-fast; the Step 2 table names the gate and the conditional refactor;
+`briefFor` guards `u.areas`.
 
 ---
 

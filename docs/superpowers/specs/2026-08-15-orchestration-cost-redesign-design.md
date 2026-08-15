@@ -42,8 +42,10 @@ version of this document.**
 
 The first pass of this analysis counted one "turn" per `type:"assistant"` line. That is wrong:
 a real transcript emits SEVERAL assistant lines per API response, all sharing one `message.id`,
-each carrying a snapshot of the same `usage` object. Measured inflation is **1.60x-1.78x** across
-these runs (chimera-49b: 3,094 lines → 1,914 real turns).
+each carrying a snapshot of the same `usage` object. Across **162 real runs** the inflation ranges
+**1.40x-2.70x**, median 1.84x, pooled **1.87x** — it is a per-run property, not a constant, so never
+apply a fixed divisor to an uncorrected figure. Within the four runs analysed here it is 1.60x-1.78x
+(chimera-49b: 3,094 lines → 1,914 real turns).
 
 The bias is not uniform. Within a `message.id`, `cache_read` / `cache_creation` / `input` are
 identical in every snapshot, so naive summing multiplies them in full; `output_tokens` grows across
@@ -53,6 +55,12 @@ moved materially when corrected (output went from an apparent ~5% of cost to 8-1
 
 Correct method, and the one `scripts/wf-cost.mjs` implements: key on `message.id` and keep the LAST
 record per id. Do not sum within a group; do not keep the first.
+
+**Keep-last applies to `usage` only.** A snapshot's `content` array is a *different slice* of the
+response, not a growing superset, so parallel tool calls are split across snapshots — keeping the
+last record loses some of them (measured: 98 reported against 112 real). Tool counts must dedupe on
+`tool_use.id` instead. Finding 5's tool-mix figures below were derived by counting across all lines
+and are therefore **not** affected by the turn-inflation correction.
 </HARD-GATE>
 
 Sample after correction: 128 agents with ≥5 real turns across four runs. The lottogame run drops

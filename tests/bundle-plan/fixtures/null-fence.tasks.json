@@ -1,7 +1,0 @@
-{
-  "planPath": "docs/superpowers/plans/x.md",
-  "tasks": [
-    {"id": 0, "subject": "A", "status": "pending", "description": "**Goal:** A.\n\n```json:metadata\nnull\n```"}
-  ],
-  "lastUpdated": "2026-08-13T00:00:00Z"
-}

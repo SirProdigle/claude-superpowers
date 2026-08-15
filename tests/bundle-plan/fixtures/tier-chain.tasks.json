@@ -1,9 +1,0 @@
-{
-  "planPath": "docs/superpowers/plans/x.md",
-  "tasks": [
-    {"id": 0, "subject": "A", "status": "pending", "metadata": {"files": ["src/a.ts"], "modelTier": "mechanical"}},
-    {"id": 1, "subject": "B", "status": "pending", "blockedBy": [0], "metadata": {"files": ["src/b.ts"], "modelTier": "standard"}},
-    {"id": 2, "subject": "C", "status": "pending", "blockedBy": [1], "metadata": {"files": ["src/c.ts"], "modelTier": "mechanical"}}
-  ],
-  "lastUpdated": "2026-08-13T00:00:00Z"
-}

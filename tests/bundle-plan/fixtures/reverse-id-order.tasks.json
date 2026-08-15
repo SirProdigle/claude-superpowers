@@ -1,8 +1,0 @@
-{
-  "planPath": "docs/superpowers/plans/x.md",
-  "tasks": [
-    {"id": 2, "subject": "Low id, blocked by High", "status": "pending", "blockedBy": [5], "metadata": {"files": ["src/x.ts"], "modelTier": "standard"}},
-    {"id": 5, "subject": "High id, blocks Low", "status": "pending", "metadata": {"files": ["src/y.ts"], "modelTier": "standard"}}
-  ],
-  "lastUpdated": "2026-08-13T00:00:00Z"
-}

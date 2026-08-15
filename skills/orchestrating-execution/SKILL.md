@@ -16,14 +16,43 @@ after it returns. Every line of code in this run is written by agents the workfl
 enforcement — it resolves every tier to a model itself and logs each dispatch. That only works if
 you hand it well-formed input. Everything below exists to make the input well-formed.
 
+## Pre-flight: is this plan orchestrable?
+
+<HARD-GATE>
+Orchestration runs the whole plan inside ONE background Workflow (`orchestrate.js`). Its implementer
+agents are workflow-dispatched agents, and such an agent's toolset does **not** include `Agent` or
+`Workflow` (verified 2026-08-15: a probe agent reported its tools as Artifact, Bash, Edit,
+ListAgents, Read, ReportFindings, Skill, SendUserFile, ToolSearch, Write, StructuredOutput — no
+`Agent`, no `Workflow`). Two consequences that are absolute, not probabilistic:
+
+- **A workflow cannot nest a workflow** (`workflow()` inside a child throws; the Workflow tool is
+  also absent from implementers). So a plan task that launches its own Workflow cannot run here.
+- **An implementer agent cannot spawn sub-agents.** No `Agent` tool. So a plan task that fans out
+  work across parallel agents (map-reduce over many items, an inference sweep, a judge panel) cannot
+  run here either.
+
+**Before Step 1, scan the plan's task steps for either pattern** — any step that says "run X as a
+Workflow", invokes the `Workflow`/`Agent` tool, or describes a parallel agent fan-out. If ANY task
+needs it, orchestration is the wrong vehicle: STOP and route to `subagent-driven-development`
+instead, where the coordinator session (which *does* hold `Agent`/`Workflow`) launches each fan-out
+and gates between tasks. Tell your human partner plainly *why* — it is a capability wall, not a
+preference — and do not burn a long background run discovering it deep inside a task.
+
+Everything an implementer CAN do it does through `Bash`, `Read`, `Edit`, `Write` (and MCP tools via
+`ToolSearch`): build, test, run scripts, commit. A plan whose every task is self-contained code +
+shell work is a good fit. A plan that orchestrates *other agents* is not.
+</HARD-GATE>
+
 ## The Process
 
 ```dot
 digraph process {
     rankdir=TB;
     "Resolve mode (simple | full)" [shape=box];
-    "bd present?" [shape=diamond];
-    "AskUserQuestion: init / untracked / cancel" [shape=box];
+    "bd on PATH?" [shape=diamond];
+    "STOP — bd not installed, hand back to your human partner" [shape=box style=filled fillcolor=lightpink];
+    ".beads/ present?" [shape=diamond];
+    "Run bd init" [shape=box];
     "Run bundle-plan.mjs" [shape=box];
     "Exit 0?" [shape=diamond];
     "STOP — show stderr verbatim, hand back to your human partner" [shape=box style=filled fillcolor=lightpink];
@@ -36,10 +65,12 @@ digraph process {
     "Close completed beads, report epic id" [shape=box];
     "Suggest /complete-epic <epic-id>" [shape=box style=filled fillcolor=lightgreen];
 
-    "Resolve mode (simple | full)" -> "bd present?";
-    "bd present?" -> "Run bundle-plan.mjs" [label="yes"];
-    "bd present?" -> "AskUserQuestion: init / untracked / cancel" [label="no"];
-    "AskUserQuestion: init / untracked / cancel" -> "Run bundle-plan.mjs";
+    "Resolve mode (simple | full)" -> "bd on PATH?";
+    "bd on PATH?" -> "STOP — bd not installed, hand back to your human partner" [label="no"];
+    "bd on PATH?" -> ".beads/ present?" [label="yes"];
+    ".beads/ present?" -> "Run bundle-plan.mjs" [label="yes"];
+    ".beads/ present?" -> "Run bd init" [label="no"];
+    "Run bd init" -> "Run bundle-plan.mjs";
     "Run bundle-plan.mjs" -> "Exit 0?";
     "Exit 0?" -> "STOP — show stderr verbatim, hand back to your human partner" [label="no"];
     "Exit 0?" -> "Show manifest, commit it with the plan" [label="yes"];
@@ -85,28 +116,41 @@ Both must hold. Beads is the durable record for the whole run: the workflow's im
 tell agents to run `bd show <id>` for their task detail, Implement-phase commits are prefixed with
 the task id, and the fix, test and refactor commits are prefixed with the epic id.
 
-If either check fails, ask — this is the only question this skill asks:
+The two halves of that check fail for different reasons and get different treatment.
 
-```yaml
-AskUserQuestion:
-  question: "CLARIFICATION: this repo has no Beads tracker (no `bd` on PATH, or no `.beads/` directory). Orchestrated execution normally uses Beads as the durable record of the plan. How should I proceed?"
-  header: "Tracking"
-  options:
-    - label: "Initialise Beads"
-      description: "Run `bd init` here, then port the plan into a new epic. Beads writes its own agent-instructions snippet and installs hooks that auto-inject `bd prime` at session start. (If `bd` is not installed at all I will stop and tell you how to install it.)"
-    - label: "Continue untracked"
-      description: "Run the plan with no tracker. Agents read task detail from the plan document instead of `bd show`; nothing records progress, and `/complete-epic` is unavailable afterwards."
-    - label: "Cancel"
-      description: "Stop here. The plan and its task file are already committed; nothing is lost."
+**No `.beads/` directory, but `bd` is on PATH — initialise it, do not ask.**
+
+```bash
+bd init
 ```
 
-The literal token `CLARIFICATION` in the question text is **required**. The
-`pre-askuser-handoff-guard` hook is still armed at this point (writing-plans ran, tasks were
-created), and that token is its escape hatch. Without it the hook blocks the call and teaches you to
-re-issue the execution handoff menu, which would loop you back into this skill.
+A missing tracker in a repo that has `bd` available is a setup gap, not a decision. `bd init` is
+cheap, local, reversible (`rm -rf .beads`), and creates nothing outside the repo except the hooks it
+installs deliberately. Announce that you ran it — "no `.beads/` here, ran `bd init`" — and continue
+to Step 3. Beads writes its own agent-instructions snippet and installs hooks that auto-inject
+`bd prime` at session start; there is no tracking skill to defer to and no onboarding for you to
+perform.
 
-There is no tracking skill to defer to. `bd init` does the onboarding itself; do not go looking for
-one.
+If `bd init` itself fails, treat it as the `bd`-missing case below: STOP and surface its stderr
+verbatim.
+
+**No `bd` on PATH — STOP.**
+
+You cannot install it and must not guess a package manager. Tell your human partner that
+orchestrated execution needs the `bd` binary, show what `command -v bd` returned, and hand the
+decision back. Offer the alternative plainly: subagent-driven execution needs no tracker.
+
+**Untracked mode is not offered as a routine choice.** It exists (Step 6f) for the case where your
+human partner explicitly asks for it after being told what it costs — `orchestrate.js` hardcodes
+`bd show <id>` into every implementer prompt, so agents fight the "no tracker" clause throughout,
+nothing records progress, and `/complete-epic` is unavailable afterwards. Do not volunteer it as
+an equal option; `bd init` is the answer whenever `bd` exists.
+
+If you do need to ask your human partner anything at this point, the literal token `CLARIFICATION`
+must appear in the question text. The `pre-askuser-handoff-guard` hook is still armed here
+(writing-plans ran, tasks were created), and that token is its escape hatch. Without it the hook
+blocks the call and teaches you to re-issue the execution handoff menu, which would loop you back
+into this skill.
 
 ## Step 3: Generate the bundle manifest
 
@@ -426,3 +470,5 @@ Skip Steps 5, 6b, 6d, and the bead and `/complete-epic` halves of Step 7.
 - You are combining `--claim` with `--if-status`.
 - Your `ctx` string does not end with `Do NOT run bd close.`
 - You are about to call the Workflow tool with a string where an object belongs.
+- A plan task's steps say "run as a Workflow" or fan out across agents, and you are proceeding
+  anyway — implementers have no `Agent`/`Workflow` tool; route to `subagent-driven-development`.

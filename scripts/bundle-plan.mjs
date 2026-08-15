@@ -310,49 +310,11 @@ while (remaining.size) {
 }
 bundles = ordered;
 
-// --- enforce caps last, so the message can name the real culprit
-for (const b of bundles) {
-  const taskBreach = b.taskIds.length > MAX_TASKS;
-  const fileBreach = b.files.length > MAX_FILES;
-  if (!taskBreach && !fileBreach) continue;
-
-  const shared = b.files.filter((f) =>
-    b.taskIds.filter((id) => filesOf(tasks.find((t) => t.id === id)).has(f)).length > 1);
-
-  // With packing gone, every multi-task bundle exists only because of a
-  // shared file or a blockedBy edge somewhere inside it — there is no third
-  // cause left to name.
-  let cause;
-  if (shared.length) {
-    cause = `Shared files forcing the merge: ${shared.join(", ")}.`;
-  } else {
-    const edgeTasks = b.taskIds.filter((id) => {
-      const t = tasks.find((x) => x.id === id);
-      return (t.blockedBy || []).some((dep) => b.taskIds.includes(dep));
-    });
-    cause = `No shared files; merged via a blockedBy edge (tasks ${edgeTasks.join(", ")}).`;
-  }
-
-  const capNote = taskBreach && fileBreach
-    ? `both the task cap and the file cap (raise --max-tasks and/or --max-files)`
-    : taskBreach
-      ? `the task cap (raise --max-tasks)`
-      : `the file cap (raise --max-files)`;
-
-  // The restructure advice only makes sense when there's a shared file to
-  // restructure away — appending it unconditionally was misleading on the
-  // blockedBy-edge branch, which has nothing to do with shared files.
-  const restructureNote = shared.length
-    ? " Restructure the plan so each shared file is touched by one task."
-    : "";
-
-  console.error(
-    `bundle-plan: bundle ${b.id} has ${b.taskIds.length} tasks / ${b.files.length} files ` +
-    `(cap ${MAX_TASKS}/${MAX_FILES}), breaching ${capNote}. Tasks: ${b.taskIds.join(", ")}. ` +
-    `${cause}${restructureNote}`
-  );
-  process.exit(1);
-}
+// --- bundle-size caps removed (fork decision, 2026-08-15): a strictly
+// sequential, gate-per-task plan legitimately collapses into one large bundle
+// via its blockedBy chain, and there is nothing to "restructure away" (no shared
+// files). The caps only ever blocked that valid shape, so they are gone. MAX_TASKS
+// / MAX_FILES / --max-* remain accepted as no-ops for CLI compatibility.
 
 const manifest = {
   planPath: doc.planPath,

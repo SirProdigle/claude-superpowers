@@ -98,7 +98,7 @@ Your human partner already chose at the handoff:
 | Handoff option | Pipeline |
 |---|---|
 | Orchestrated — Simple | Implement → deterministic gate → one combined review-and-fix pass → bounded test loop |
-| Orchestrated — Full | Implement (reviews overlapped) → deterministic gate → per-unit + whole-plan review → routed fixes → test loop → refactor *only on structural findings* → test loop |
+| Orchestrated — Full | Implement (reviews overlapped) → deterministic gate → per-unit + whole-plan review → routed fixes → test loop → *optional* code-quality pass → test loop |
 
 Do not ask which mode; it was chosen. The mode decides which phases you write into the script — in
 Simple mode you simply omit the Review and Refactor blocks rather than branching on a variable.
@@ -166,7 +166,6 @@ is ~27k tokens. Merging tasks builds long agents; splitting them is close to fre
 | One task = one bundle | **Default** | Agent lifetime is the dominant cost term. The floor for an extra agent is ~27k tokens; the marginal turn of a long agent costs 300-700k. |
 | Never merge tasks of different `modelTier` | Absolute | The bundle is one dispatch at one model. Mixing tiers means paying frontier for mechanical work, or worse, the reverse. |
 | Merge two tasks ONLY when all three hold: both trivially small, they share a file in `files[]`, AND they are joined by a direct `blockedBy` edge | Rare exception | All three together mean the second agent would otherwise re-derive the first's work immediately. Any one or two of them is not enough. |
-| Never merge more than 2 tasks into one bundle | Absolute | Three merged tasks is the shape that produced the 266-turn agent. |
 | A shared file creates a **notes-chain obligation**, not a merge | Mandatory | Implementation is sequential, so two agents never write one file concurrently. The real risk is the second agent not knowing the interface moved — which the notes chain fixes, at no cost in agent lifetime. |
 
 "Trivially small" is mechanical, not a judgment call: a task whose `files[]` has at most 2 entries
@@ -183,7 +182,7 @@ the default rule a bundle is usually exactly one task. "Bundle" and "unit" mean 
 
 Then order:
 
-- **Within a bundle** (at most 2 tasks), list the blocking task first. Never numerically.
+- **Within a bundle**, list the blocking task first. Never numerically.
 - **Across bundles**, emit them in an order where every bundle's dependencies appear earlier. The
   script implements bundles in array order and trusts it.
 
@@ -196,8 +195,8 @@ break the dependency cycle, or split the merge you made — and it is their call
 ## Step 4: Show the bundling
 
 Print it before you write a line of script — this is the cheapest moment in the run to catch a
-bundling mistake. A short table: bundle id, tier, task ids, and — for any bundle holding 2 tasks —
-which of the three merge conditions justified it. Say plainly that implementation runs bundles in
+bundling mistake. A short table: bundle id, tier, task ids, and — for any bundle holding more than
+one task — which of the three merge conditions justified it. Say plainly that implementation runs bundles in
 that order, that the default is one task per bundle, and that any merge you made must name all
 three conditions.
 
@@ -296,7 +295,10 @@ task's `json:metadata` carries an `"areas"` list. Copy them across:
   brief to every agent** — the brief is re-read on every turn of that agent, so an irrelevant one
   is a pure tax.
 
-If a brief exceeds ~1500 tokens, cut it down here rather than passing it through. If the plan has
+There is no token budget on a brief — a primer complete enough that an implementer never has to
+open a file just to orient itself pays for itself many times over. What does not belong is bulk:
+if a brief dumps code, pastes function bodies, or lists an API exhaustively, cut that out here
+rather than passing it through. If the plan has
 no `## Code Areas` section (older plans), set `AREA = {}` and `areas: []` on every unit; the
 pipeline degrades to the previous behaviour rather than failing.
 
@@ -321,7 +323,7 @@ export const meta = {
     { title: "Review",    detail: "design and correctness only" },
     { title: "Fixes",     detail: "routed to the owning unit, sequential" },
     { title: "Test",      detail: "verify, then a bounded fix loop" },
-    { title: "Refactor",  detail: "only when review found something structural" },
+    { title: "Refactor",  detail: "one code-quality pass, when the epic earns it and the tree is green" },
   ],
 };
 
@@ -330,7 +332,12 @@ const EPIC   = "myproj-9rm";
 const MODEL  = { mechanical: "<from routing file>", standard: "<…>", frontier: "<…>" };
 const EFFORT = { mechanical: "low", standard: "medium", frontier: "inherit" };
 
-// Area briefs from the plan's Code Areas section. Cap each at ~1500 tokens.
+// Does this epic earn a code-quality pass? Set true for a medium-to-large feature or one with
+// real complexity; false for a small or mechanical epic. Simple mode never runs it. This is a
+// judgment you make once, here, having read the whole plan — see §6c.
+const RUN_QUALITY_PASS = true;
+
+// Area briefs from the plan's Code Areas section, verbatim. No length cap — but no code dumps.
 const AREA = {
   "sim-core": `<the plan's brief for this area, verbatim>`,
   "ui":       `<the plan's brief for this area, verbatim>`,
@@ -367,13 +374,8 @@ const FINDINGS = {
       issue:    { type: "string" },
       severity: { type: "string", enum: ["critical", "major", "minor"] },
       unitId:   { type: "string" },
-      structural: {
-        type: "boolean",
-        description: "true only if fixing this requires moving a boundary, removing duplication " +
-                     "across units, or replacing an abstraction. Behavioural bugs are false.",
-      },
     },
-    required: ["file", "issue", "severity", "structural"],
+    required: ["file", "issue", "severity"],
   } } },
   required: ["findings"],
 };
@@ -463,8 +465,7 @@ Do NOT report anything a typechecker or linter catches — unused imports, forma
 annotations, obvious null checks. A deterministic typecheck/lint gate runs on this branch before
 any of your findings are acted on. Reporting them wastes a fix agent.
 
-Set unitId="${u.id}" on every finding. Set structural=true ONLY when the fix requires moving a
-boundary, removing cross-unit duplication, or replacing an abstraction.`,
+Set unitId="${u.id}" on every finding.`,
     { tier: "standard", label: `review:${u.id}`, phase: "Review", schema: FINDINGS }
   ).catch((e) => { log(`review:${u.id} failed: ${e}`); return null; }));
 }
@@ -489,8 +490,7 @@ const epicReview = await dispatch(
 Focus on what per-unit review structurally cannot see: cross-unit integration bugs, architecture
 drift, duplicated logic between units, invariants broken in aggregate.
 Do NOT report anything a typechecker or linter catches.
-Leave unitId unset on findings that span units or belong to none. Set structural=true only per the
-schema's definition.`,
+Leave unitId unset on findings that span units or belong to none.`,
   { tier: null, label: "review:plan", phase: "Review", schema: FINDINGS }
 // A rejection here would abort the run after every implementer, the gate and every per-unit
 // review has already been paid for. The consumer below already handles null.
@@ -499,10 +499,7 @@ const findings = [
   ...perUnit.filter(Boolean).flatMap((r) => r.findings || []),
   ...((epicReview && epicReview.findings) || []),
 ];
-log(`${findings.length} review findings (${findings.filter((f) => f.structural).length} structural)`);
-// A finding with no `structural` key is falsy but is NOT a claim that it is non-structural.
-const missingFlag = findings.filter((f) => f.structural === undefined).length;
-if (missingFlag) log(`WARNING: ${missingFlag} finding(s) missing the structural flag — counted as non-structural`);
+log(`${findings.length} review findings`);
 
 // ---- Fixes: routed to the unit that owns them, sequential. Sequential because two
 // fixers could otherwise write the same file — unlike review, fixing is not read-only.
@@ -575,33 +572,35 @@ ${res ? res.summary : "test agent returned nothing — run the suite yourself an
 
 const greenAfterImpl = await testLoop("post-fixes");
 
-// ---- Refactor: only when review actually found something structural, and only on green.
-const structural = findings.filter(
-  (f) => f.structural && (f.severity === "critical" || f.severity === "major")
-);
+// ---- Refactor: one code-quality pass over the epic, when the epic earns it and only on green.
+// Whether it earns it is decided at authoring time (RUN_QUALITY_PASS), not inferred from findings.
 let greenAfterRefactor = null;
 let refactorSkipped = null;
-if (greenAfterImpl === null) {
+if (!RUN_QUALITY_PASS) {
+  refactorSkipped = "epic does not earn a quality pass";
+} else if (greenAfterImpl === null) {
   refactorSkipped = "test state unknown — verifier returned nothing";
 } else if (greenAfterImpl === false) {
   refactorSkipped = "tree not green";
-} else if (!structural.length) {
-  refactorSkipped = "no major/critical structural findings";
 } else {
   phase("Refactor");
   const plan = await dispatch(
-    `Refactor planning for epic ${EPIC}. Do NOT change any code. Address EXACTLY these structural
-findings and nothing else — this is not a general cleanup pass:
-${structural.map(fmt).join("\n")}
+    `Code-quality review of everything built for epic ${EPIC}. Do NOT change any code — you are
+producing a plan for someone else to execute.
+
+Read the code this epic wrote and the full git log for it, then judge it as a whole: spaghetti
+control flow, weak or missing abstractions, poor or evasive typing, duplication across files or
+units, unclear module boundaries. Behaviour is already correct and tested — you are judging the
+shape of the code, not what it does.
 
 What the fix agents already reported doing:
 ${fixNotes.length ? fixNotes.join("\n") : "(none)"}
 
-If a finding above is already resolved, say so and OMIT it from the plan. If everything is already
-clean, say so and return a minimal plan — do not invent work.
+Skip anything they already resolved. If the code is already clean, say so plainly and return a
+minimal plan — do not invent work to justify this pass.
 
-Read the code around them, then produce a concrete ORDERED plan with file-level instructions an
-implementer can execute without judgment calls.`,
+Otherwise produce a concrete ORDERED plan with file-level instructions an implementer can execute
+without judgment calls.`,
     { tier: "frontier", label: "refactor:plan", phase: "Refactor" }
   );
   await dispatch(
@@ -615,19 +614,18 @@ ${plan}`,
 if (refactorSkipped) log(`refactor skipped: ${refactorSkipped}`);
 
 return {
-  epicId: EPIC, units: UNITS.length, findings: findings.length,
-  structuralFindings: structural.length, refactorSkipped,
+  epicId: EPIC, units: UNITS.length, findings: findings.length, refactorSkipped,
   greenAfterImpl, greenAfterRefactor, lastTestSummary, notes,
   outputTokens: budget.spent(),
 };
 ```
 
 **Simple mode** keeps Implement, Gate and Test. It deletes the Review and Refactor blocks (and
-`reviewPromises`, `findings`, `fmt`, `cross`, `structural`) and replaces the whole Fixes phase with
-one pass. The Gate phase stays — it is the cheapest quality step in the pipeline and it is what
-lets the combined pass concentrate on design. Simple mode also has no findings array, so drop
-`findings`, `structuralFindings` and `refactorSkipped` from the `return` object. Leaving them
-referenced throws a `ReferenceError` at the end of the run, after every agent has been paid for.
+`reviewPromises`, `findings`, `fmt`, `cross`, `RUN_QUALITY_PASS`) and replaces the whole Fixes phase
+with one pass. The Gate phase stays — it is the cheapest quality step in the pipeline and it is what
+lets the combined pass concentrate on design. Simple mode also has no findings array and no refactor
+phase, so drop `findings` and `refactorSkipped` from the `return` object. Leaving them referenced
+throws a `ReferenceError` at the end of the run, after every agent has been paid for.
 
 ```js
 phase("Fixes");
@@ -655,9 +653,18 @@ Change the script freely; change these only with a reason you can say out loud.
 | Fixes routed **by owning unit** | The unit's agent context is the only place the intent behind the code exists. |
 | Implementers run **only their own narrow tests** | Measured: Bash is 78% of tool calls, dominated by repeated suite runs. Each is a turn costing 300-700k late in an agent's life. Full verification is one fresh cheap agent instead. |
 | Test loop is **bounded** (2 fix rounds + a final verify) then stops | An unbounded loop burns a night on an unfixable failure. |
-| Refactor runs **only on major/critical structural findings**, after green | Refactoring code that just passed review and tests pays a long-lived writing agent plus a second test loop to rediscover a design that already worked. The `structural` flag makes the trigger mechanical rather than a re-judgment. |
+| Refactor is **one code-quality pass per epic**, gated on `RUN_QUALITY_PASS` and on green | Refactoring code that just passed review and tests pays a long-lived writing agent plus a second test loop, so it must be earned. The earlier design gated it on a per-finding `structural` boolean, which depended on every standard-tier reviewer classifying correctly — and needed a "missing flag" counter precisely because that adherence was never guaranteed. The judgment lives with you: you have read the whole plan and you decide once, at authoring time. |
 | `effort` is resolved centrally in `dispatch()` | An agent's own output is a large share of its context growth, and thinking tokens are output. Tiers mapped to `"inherit"` — and the session-level whole-plan pass — deliberately pass no `effort`. |
 | Routing is resolved **in the script**, not by a hook | `PreToolUse:Agent` hooks do not fire for Workflow `agent()` spawns (measured 2026-08-13). |
+
+**Making the `RUN_QUALITY_PASS` call.** Ask one question of the plan you have just read: *if a
+careful engineer inherited this code a month from now, would its shape be worth an hour of theirs?*
+Set it `true` for a medium-to-large feature, for anything with real complexity, for work that
+introduces new abstractions or spans several modules. Set it `false` for a small, mechanical or
+single-file epic — a config change, a rename, a handful of thin CRUD endpoints — where a frontier
+planner would have to invent work to justify itself. When genuinely torn, set it `true`: the pass
+is instructed to return a minimal plan on clean code, so the downside is one frontier read, while
+the downside of skipping is a design nobody looks at again.
 
 ### 6d. Workflow-script constraints that bite
 
@@ -776,8 +783,7 @@ for the cost report, and it is not recoverable from the returned summary.
 - You are typing a model id you did not just read out of `model-routing.json`.
 - Your bundle order is not one where every dependency appears earlier, and you are proceeding anyway.
 - You put two tasks of different `modelTier` in one bundle.
-- You put more than 2 tasks in one bundle.
-- You merged two tasks without being able to name all three merge conditions out loud.
+- You merged tasks into one bundle without being able to name all three merge conditions out loud.
 - You are about to run `bd link` without having said "A is blocked by B" to yourself first.
 - You are about to run `bd create` for a child without `#task-<planTaskId>` on its `--external-ref`.
 - You are recalling a bead id from memory instead of reading it back out of `bd list`.

@@ -55,24 +55,26 @@ from brainstorming, so write it down once, here, instead of having every impleme
 **If the files genuinely will not cluster** — a plan that touches one file, or a scatter of
 unrelated paths with no shared module — do not invent areas to reach two. Fall back to **one brief
 for the whole plan**, under the same `## Code Areas` section as a single `### Area: whole-plan`,
-still capped at ~1500 tokens and still listed in the header and in every task's `"areas"`. Say
+written to the same content rule below and still listed in the header and in every task's
+`"areas"`. Say
 plainly in the plan that the fallback was used and why, so a reader knows the single area is a
 deliberate outcome rather than a half-finished clustering step.
 
-**Cap each brief at ~1500 tokens.** This is a real constraint, not a style preference: the brief is
-inlined into every dispatch prompt for agents working in that area, so it is re-read on every turn
-of those agents. Measured, an 8000-token brief adds 2.5-10% to a run's cache-read volume. A tight
-brief pays for itself; a bloated one is a permanent tax.
+**Write a brief but *complete* primer** — complete enough that an implementer working in this area
+never has to open a file just to orient itself. Length follows from that; there is no token budget.
+What is actually expensive is bulk: **describe, do not quote.** No code dumps, no pasted function
+bodies, no exhaustive API listings. A primer that explains what six files do and how they fit
+together is worth several times its own cost in avoided exploration; a primer that pastes one of
+them is not.
 
 **Each brief contains exactly:**
 
 - the 5-8 files that matter in this area, one line each on what that file owns
-- the interfaces and contracts that must not change
 - invariants that hold across the area
 - where this area's tests live
 
-**And never contains:** code dumps, exhaustive API listings, anything an agent could cheaply grep
-for, or restatement of the tasks.
+**And never contains:** code dumps, pasted function bodies, exhaustive API listings, or restatement
+of the tasks.
 
 **Write them into the plan document** under a top-level `## Code Areas` section, one `### Area:
 <slug>` subsection each, placed after the task list. Then list the slugs in the header's

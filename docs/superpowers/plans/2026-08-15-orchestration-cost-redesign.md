@@ -594,6 +594,11 @@ const fixNotes = [];
 // ...inside the per-unit fix loop, replace the bare `await dispatch(...)`:
   const fr = await dispatch(/* ...unchanged prompt... */);
   fixNotes.push(`${u.id}: ${fr || "(fixer returned nothing)"}`);
+
+// ...and the cross-cutting fixer too — it is the one most likely to have touched
+// the structural findings the refactor planner is about to be handed:
+  const cr = await dispatch(/* ...unchanged cross-cutting prompt... */);
+  fixNotes.push(`cross-cutting: ${cr || "(fixer returned nothing)"}`);
 ```
 
 and in the refactor-planning prompt, after the findings list:
@@ -618,12 +623,23 @@ if (missingFlag) log(`WARNING: ${missingFlag} finding(s) missing the structural 
 In `testLoop`, distinguish unknown from red:
 
 ```js
-  const final = await verify(`${round}:final`);
+  const final = await verify(`test:${round}:final`);   // keep the `test:` prefix — labels are the audit trail
   if (final && final.pass) { lastTestSummary = null; return true; }
-  if (!final) { lastTestSummary = "(verifier returned nothing — test state unknown)"; return null; }
+  if (!final) {
+    lastTestSummary = "(verifier returned nothing — test state unknown)";
+    log(`test loop (${round}): verifier returned nothing — test state unknown, branch left intact`);
+    return null;
+  }
   lastTestSummary = final.summary || "(test agent returned no summary)";
+  log(`test loop exhausted after 2 fix rounds (${round}) — stopping, branch left intact`);
   return false;
 ```
+
+> **Errata correction, round 1 follow-up.** The first version of this snippet dropped the
+> "test loop exhausted" `log()` line and un-prefixed the final verify's label
+> (`post-fixes:final` instead of `test:post-fixes:0`-style). Both are restored above. The `log()`
+> line is the only signal that a run stopped red rather than green, and the label prefix is what
+> makes the dispatch audit trail greppable.
 
 and at the refactor gate:
 

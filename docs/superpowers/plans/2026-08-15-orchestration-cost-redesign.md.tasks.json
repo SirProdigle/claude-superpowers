@@ -10,7 +10,7 @@
     {
       "id": 1,
       "subject": "Task 2: Restructure the reference pipeline script",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         0
       ],
@@ -25,7 +25,7 @@
     {
       "id": 3,
       "subject": "Task 4: Consume area briefs in both execution paths",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1,
         2
@@ -35,13 +35,13 @@
     {
       "id": 4,
       "subject": "Task 5: Ship scripts/wf-cost.mjs with tests",
-      "status": "in_progress",
+      "status": "completed",
       "description": "**Goal:** A zero-dependency post-run cost report that reads a Workflow run's agent transcripts and reports turns, context growth, and cost per agent and per phase.\n\n**Files:**\n- Create: `scripts/wf-cost.mjs`\n- Create: `tests/wf-cost/wf-cost.test.mjs`\n- Create: `tests/wf-cost/fixtures/agent-aaa.jsonl`\n- Create: `tests/wf-cost/fixtures/agent-bbb.jsonl`\n\n**Acceptance Criteria:**\n- [ ] `node scripts/wf-cost.mjs <dir>` prints a per-agent table and totals\n- [ ] `--json` emits machine-readable output with `agents` and `totals` keys\n- [ ] Cost index is `output*5 + fresh*1 + cacheRead*0.1`, fresh = input_tokens + cache_creation_input_tokens\n- [ ] Agents are labelled from `journal.jsonl` when present, else the transcript filename\n- [ ] Exits 2 with a message when the directory has no `agent-*.jsonl`\n- [ ] Malformed JSON lines are skipped, not fatal\n- [ ] `bun test tests/wf-cost/` passes (8 tests)\n\n**Verify:** `cd ~/projects/claude-superpowers && bun test tests/wf-cost/` \u2192 all tests pass\n\n```json:metadata\n{\"files\": [\"scripts/wf-cost.mjs\", \"tests/wf-cost/wf-cost.test.mjs\", \"tests/wf-cost/fixtures/agent-aaa.jsonl\", \"tests/wf-cost/fixtures/agent-bbb.jsonl\"], \"verifyCommand\": \"cd ~/projects/claude-superpowers && bun test tests/wf-cost/\", \"acceptanceCriteria\": [\"node scripts/wf-cost.mjs <dir> prints per-agent table and totals\", \"--json emits agents and totals keys\", \"cost index is output*5 + fresh*1 + cacheRead*0.1\", \"labels come from journal.jsonl when present\", \"exits 2 when no agent-*.jsonl found\", \"malformed JSON lines skipped not fatal\", \"bun test tests/wf-cost/ passes\"], \"modelTier\": \"standard\", \"estimatedScope\": \"medium\"}\n```"
     },
     {
       "id": 5,
       "subject": "Task 6: Wire the cost report into Step 8",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         3,
         4
@@ -51,7 +51,7 @@
     {
       "id": 6,
       "subject": "Task 7: Sync the docs",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         0,
         1,
@@ -61,5 +61,5 @@
       "description": "**Goal:** Make `README.md` and the superseded 2026-08-13 design document describe what now runs.\n\n**Files:**\n- Modify: `README.md` (the `### Bundling` subsection, the pipeline table, new `### Cost reporting` subsection)\n- Modify: `docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md` (superseded banner)\n\n**Acceptance Criteria:**\n- [ ] README's `### Bundling` paragraph describes one-task-per-agent and no longer says shared files must share a bundle\n- [ ] README's pipeline table mentions the Gate phase and conditional refactor\n- [ ] README gains a short `### Cost reporting` subsection naming `scripts/wf-cost.mjs`\n- [ ] The 2026-08-13 spec's banner points at the new spec for bundling and pipeline shape\n- [ ] `README.md` changes are limited to the Orchestrated Execution section (unrelated WIP untouched)\n\n**Verify:** `grep -q 'wf-cost.mjs' README.md && grep -q '2026-08-15-orchestration-cost-redesign' docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md && echo TASK7_OK`\n\n```json:metadata\n{\"files\": [\"README.md\", \"docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md\"], \"verifyCommand\": \"cd ~/projects/claude-superpowers && grep -q 'wf-cost.mjs' README.md && grep -q 'notes-chain obligation' README.md && grep -q '2026-08-15-orchestration-cost-redesign' docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md && echo TASK7_OK\", \"acceptanceCriteria\": [\"README Bundling describes one-task-per-agent\", \"README pipeline table mentions Gate and conditional refactor\", \"README has a Cost reporting subsection naming wf-cost.mjs\", \"2026-08-13 spec banner points at the new spec\", \"README edits confined to the Orchestrated Execution section\"], \"modelTier\": \"mechanical\", \"estimatedScope\": \"small\"}\n```"
     }
   ],
-  "lastUpdated": "2026-08-15T16:26:16Z"
+  "lastUpdated": "2026-08-15T16:41:45Z"
 }

@@ -33,8 +33,11 @@ function scanAgent(path) {
   const usageById = new Map();
   // Content is not a growing superset: each snapshot carries a different slice, so one
   // response's tool calls can be split across snapshots. Keeping only the last snapshot's
-  // content loses calls (measured 98 kept vs 112 real on one run), and counting every line
-  // double-counts them. Both are avoided by de-duplicating tool_use blocks on their own id.
+  // content loses calls (measured 98 kept vs 112 real on one run), so we read every line.
+  // Counting every line WOULD double-count a call if a tool_use id ever repeated across
+  // snapshots — across 627 real transcripts none did, so per-line counting and deduped
+  // counting agree on real data. De-duplicating tool_use blocks on their own id is therefore
+  // defensive, not a correction.
   const toolNameById = new Map();
   let lineNo = 0;
   let anon = 0;

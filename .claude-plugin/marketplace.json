@@ -8,8 +8,8 @@
   "plugins": [
     {
       "name": "claude-superpowers",
-      "description": "Claude Code Superpowers \u2014 brainstorm, plan, TDD, gates and subagent-driven development. Fork of pcvelz/superpowers.",
-      "version": "6.4.1-dev",
+      "description": "Claude Code Superpowers — brainstorm, plan, TDD, gates and subagent-driven development. Fork of pcvelz/superpowers.",
+      "version": "6.5.0-dev",
       "source": "./",
       "author": {
         "name": "pcvelz",
@@ -17,5 +17,5 @@
       }
     }
   ],
-  "version": "6.4.1-dev"
+  "version": "6.5.0-dev"
 }

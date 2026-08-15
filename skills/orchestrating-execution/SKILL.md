@@ -285,6 +285,23 @@ level. The file may also carry an `effort` map (`{"mechanical":"low","standard":
 it per dispatch via `agent()`'s `effort` option. Capability and effort are independent dials: if a
 task outgrows its tier, escalate the tier, never the effort.
 
+### 6a-bis. Carry the plan's area briefs into the script
+
+The plan document has a `## Code Areas` section with one `### Area: <slug>` brief each, and every
+task's `json:metadata` carries an `"areas"` list. Copy them across:
+
+- Each brief becomes an entry in the script's `AREA` map, verbatim, as a template literal.
+- Each unit's `areas` array is the union of its task(s)' `areas` values.
+- `briefFor(unit)` then inlines only the briefs that unit actually touches. **Do not pass every
+  brief to every agent** — the brief is re-read on every turn of that agent, so an irrelevant one
+  is a pure tax.
+
+If a brief exceeds ~1500 tokens, cut it down here rather than passing it through. If the plan has
+no `## Code Areas` section (older plans), set `AREA = {}` and `areas: []` on every unit; the
+pipeline degrades to the previous behaviour rather than failing.
+
+Backticks inside a brief must be escaped for the template literal, or the script will not parse.
+
 ### 6b. The reference script
 
 This is the pipeline, in full, for Full mode. Adapt it — bake in your bundles, your bead ids, your

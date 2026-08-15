@@ -27,6 +27,17 @@ Task tool (general-purpose):
 
     [Scene-setting: where this fits, dependencies, architectural context]
 
+    ### Code areas
+
+    [For each slug in the task's metadata "areas": paste that area's brief from the plan's
+    ## Code Areas section, VERBATIM, under a "### Area: <slug>" heading. Pass only the areas
+    this task touches — an unused brief is re-read on every turn of this agent and buys nothing.
+    If the plan has no ## Code Areas section, omit this subsection entirely.]
+
+    **If you change an interface named in a brief above, say so explicitly in your report.**
+    Later tasks are working from these briefs and will not know the interface moved unless you
+    tell them.
+
     ## Before You Begin
 
     If you have questions about:

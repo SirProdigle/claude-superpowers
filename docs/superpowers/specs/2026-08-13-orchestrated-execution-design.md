@@ -7,13 +7,14 @@
 > on 2026-08-15. The arg contract between the coordinator and the fixed script was aborting runs
 > more often than the work itself was, so the pipeline moved into `skills/orchestrating-execution`
 > as guidance plus a reference script that the coordinator adapts and launches inline per plan.
-> The *pipeline* below (phases, tier roles, bundling rules, bounded test loop, refactor-after-green)
-> is still current and is restated in the skill; the *mechanism* sections — bundler CLI, manifest
+> Parts of the *pipeline* below (phases, tier roles, bounded test loop) are still current and are
+> restated in the skill. Its **bundling rules and its unconditional refactor-after-green stage are
+> NOT** — see the second note directly below. The *mechanism* sections — bundler CLI, manifest
 > file, `validateArgs`, `args` shape, `scriptPath` launch, task-id rewriting — describe code that
 > no longer exists. See "Why there is no orchestrate.js" in the README.
 >
 > **Superseded again, 2026-08-15**, on bundling and pipeline shape, by
-> `2026-08-15-orchestration-cost-redesign-design.md`. That document measures 240 real workflow
+> `2026-08-15-orchestration-cost-redesign-design.md`. That document measures 128 real workflow
 > agents and finds cost is the integral of context over turns; the "merge on coupling" bundling
 > below and the unconditional refactor stage are both reversed there. The Beads integration, tier
 > roles and bounded test loop still stand.

@@ -11,6 +11,8 @@ upstream credit belongs to Jesse Vincent and the pcvelz maintainer.
 
 ## Orchestrated Execution — Optional Flow
 
+*Current spec: [`docs/superpowers/specs/2026-08-15-orchestration-cost-redesign-design.md`](docs/superpowers/specs/2026-08-15-orchestration-cost-redesign-design.md) — the canonical description of the pipeline that ships today, including the bundling rules and the conditional refactor.*
+
 *Design history: [`docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md`](docs/superpowers/specs/2026-08-13-orchestrated-execution-design.md) records the original script-driven design. It is superseded — the fixed scripts it specifies were removed on 2026-08-15 (see [Why there is no orchestrate.js](#why-there-is-no-orchestratejs)). The section below describes what actually runs.*
 
 `writing-plans` hands off to one of four options, not two. Alongside **Subagent-Driven** (fresh
@@ -23,17 +25,20 @@ coordinator loop:
 | **Orchestrated — Simple** | Implement → deterministic gate → one combined review-and-fix pass → bounded test loop |
 | **Orchestrated — Full** | Implement (reviews overlapped) → deterministic gate → per-unit + whole-plan review → routed fixes → test loop → refactor *only on structural findings* → test loop |
 
-Pick Orchestrated when the plan is large enough to want a whole-epic review pass and a refactor
-step that `subagent-driven-development` has no phase for. Pick Simple over Full for a plan too
-small to justify a second review layer; pick Full when cross-bundle integration risk or
-accumulated cruft make that layer worth the cost.
+Pick Orchestrated when the plan is large enough to want a whole-epic review pass — and a refactor
+phase for the cases that earn one — that `subagent-driven-development` has no phase for. Pick
+Simple over Full for a plan too small to justify a second review layer; pick Full when
+cross-bundle integration risk or accumulated cruft make that layer worth the cost.
 
 Both pipelines implement bundles **sequentially**, chaining short notes from each finished bundle
 into the next implementer's prompt — this is what keeps conventions consistent across the plan, at
 the cost of wall-clock parallelism. Full mode adds a whole-plan review (catching cross-bundle
 integration issues per-task review can't see), routes fixes back to the bundle that owns them, and
-runs a refactor pass *after* the first green test loop, not before — refactoring unverified code
-makes it impossible to tell an implementation bug from a refactor bug.
+then refactors **conditionally**: only when review flagged a major or critical *structural* finding,
+and only after the first green test loop. Most runs skip it. The condition is there because
+refactoring code that just passed review and tests pays a long-lived agent and a second test loop
+to rediscover a design that already worked; the after-green rule is there because refactoring
+unverified code makes it impossible to tell an implementation bug from a refactor bug.
 
 ### Why there is no orchestrate.js
 
@@ -65,10 +70,10 @@ produce.
 ### Bundling
 
 A bundle is the set of tasks handed to one implementer agent in one dispatch, and **the default is
-one task per bundle.** Measurement of 240 workflow agents found that cost is the integral of
-context over turns — every turn re-reads the agent's whole accumulated context — so it grows
-superlinearly with agent lifetime. The worst agent observed ran 443 turns and moved 208M tokens,
-20% of its entire run, while a fresh agent's floor is only ~26k. Splitting is cheap; merging is
+one task per bundle.** Measurement of 128 workflow agents across four runs found that cost is the
+integral of context over turns — every turn re-reads the agent's whole accumulated context — so it
+grows superlinearly with agent lifetime. The worst agent observed ran 266 turns and carried 19% of
+its entire run's cost, while a fresh agent's floor is only ~27k. Splitting is cheap; merging is
 not.
 
 Two tasks merge only when all three of these hold: both are trivially small (≤2 files, small
@@ -94,8 +99,8 @@ for your project.
 Every orchestrated run ends with a real cost number. `scripts/wf-cost.mjs` reads the run's
 `agent-*.jsonl` transcripts and reports turns, context growth and a cost index per agent, plus the
 share carried by the most expensive fifth of agents. `orchestrating-execution` runs it in Step 8.
-Median turns per agent is the number the pipeline is tuned to hold down — above ~120 means the
-bundling was too generous.
+Median turns per agent is the number the pipeline is tuned to hold down — materially above the
+58-turn baseline it was tuned against means the bundling was too generous.
 
 ```bash
 node scripts/wf-cost.mjs <transcriptDir>

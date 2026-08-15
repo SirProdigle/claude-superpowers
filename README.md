@@ -59,7 +59,7 @@ writes a Workflow script for the specific plan in front of it — bundles, bead 
 tier→model map baked in as literals. Nothing to marshal, no arg contract to violate, and a failed
 launch is a script edit away from a resume rather than a restart. What stayed fixed is the pipeline
 itself: sequential implementation with notes chained forward, review separated from fixing, fixes
-routed to the owning bundle, a bounded test loop, and refactor only after the first green.
+routed to the owning bundle, a bounded test loop, and refactor only on structural findings, and only after the first green.
 
 Model routing is resolved inside that script rather than by the
 [Subagent Model Routing](#subagent-model-routing--optional-flow) hooks below, because
@@ -98,7 +98,7 @@ for your project.
 
 Every orchestrated run ends with a real cost number. `scripts/wf-cost.mjs` reads the run's
 `agent-*.jsonl` transcripts and reports turns, context growth and a cost index per agent, plus the
-share carried by the most expensive fifth of agents. `orchestrating-execution` runs it in Step 8.
+share carried by the most expensive slice of agents (the script prints the actual share it used). `orchestrating-execution` runs it in Step 8.
 Median turns per agent is the number the pipeline is tuned to hold down — materially above the
 58-turn baseline it was tuned against means the bundling was too generous.
 

@@ -183,7 +183,7 @@ are *larger* than the uncorrected pass estimated, because per-turn growth is mor
 naive counting implied.
 
 **Caveat:** this is an extrapolation. It assumes work divides cleanly and that 5k of handoff is
-sufficient re-establishment. If small agents need more, savings shrink — though the 26k floor
+sufficient re-establishment. If small agents need more, savings shrink — though the 27k floor
 leaves substantial headroom before splitting stops paying.
 
 ## Design principles
@@ -191,7 +191,7 @@ leaves substantial headroom before splitting stops paying.
 The pipeline optimises **Σ over all agents, over all turns, of context-at-that-turn.**
 
 1. **Agent-turns are the cost unit, not tokens.** Adding a turn to a long agent is expensive;
-   adding a whole fresh agent costs ~26k.
+   adding a whole fresh agent costs ~27k.
 2. **Prefer many short agents to few long ones.**
 3. **Artifacts carry context, agents don't.** Because agents must be short, cross-task coherence
    moves into the area brief and the notes chain. Those become quality-load-bearing, not
@@ -310,7 +310,7 @@ should be one where degradation would be noticed.
 routing decisions on its own.
 
 **Reduced bundling increases dispatch count**, which increases the number of places a dispatch can
-fail and lengthens the Beads port. The 26k floor makes it cheap in tokens, not in moving parts.
+fail and lengthens the Beads port. The 27k floor makes it cheap in tokens, not in moving parts.
 
 ## Failure handling
 

@@ -1,0 +1,3 @@
+{"type":"started","key":"v2:72caba368c3953081cf3b1b5ae69995c189bb28f066b590329c34718eea69927","agentId":"ddd"}
+{"type":"result","key":"v2:72caba368c3953081cf3b1b5ae69995c189bb28f066b590329c34718eea69927","agentId":"ddd","result":{"task":"Task 7: Wire up the cost report","status":"complete","files_written":["/x/y.mjs"]}}
+{"type":"started","key":"v2:5d29e1ca89d4f552aded9cd2b1e4f0a7c3d8b96e4f1a2c3d4e5f6a7b8c9d0e1f","agentId":"eee"}

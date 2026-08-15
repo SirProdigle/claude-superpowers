@@ -1,0 +1,1 @@
+{"type":"assistant","agentId":"ddd","message":{"id":"msg_d1","model":"claude-sonnet-5","content":[{"type":"text","text":"working"}],"usage":{"input_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":100,"output_tokens":10}}}

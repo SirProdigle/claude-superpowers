@@ -1,0 +1,6 @@
+{"type":"assistant","agentId":"ccc","message":{"id":"msg_01","model":"claude-opus-5","content":[{"type":"thinking","thinking":"considering"}],"usage":{"input_tokens":5,"cache_creation_input_tokens":95,"cache_read_input_tokens":0,"output_tokens":5}}}
+{"type":"assistant","agentId":"ccc","message":{"id":"msg_01","model":"claude-opus-5","content":[{"type":"tool_use","id":"tu_a","name":"Grep","input":{"pattern":"x"}}],"usage":{"input_tokens":5,"cache_creation_input_tokens":95,"cache_read_input_tokens":0,"output_tokens":5}}}
+{"type":"assistant","agentId":"ccc","message":{"id":"msg_01","model":"claude-opus-5","content":[{"type":"tool_use","id":"tu_b","name":"Read","input":{"file_path":"/a/b.ts"}}],"usage":{"input_tokens":5,"cache_creation_input_tokens":95,"cache_read_input_tokens":0,"output_tokens":187}}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tu_a","content":"match"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tu_b","content":"file body"}]}}
+{"type":"assistant","agentId":"ccc","message":{"id":"msg_02","model":"claude-opus-5","content":[{"type":"text","text":"done"}],"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":300,"output_tokens":40}}}

@@ -317,7 +317,7 @@ export const meta = {
   description: "Implement <plan title>: implement, gate, review, fix, test, conditional refactor",
   phases: [
     { title: "Implement", detail: "one agent per task, notes chained, reviews started inline" },
-    { title: "Gate",      detail: "typecheck + lint, deterministic, before any LLM review" },
+    { title: "Gate",      detail: "typecheck + lint, deterministic, before any finding is acted on" },
     { title: "Review",    detail: "design and correctness only" },
     { title: "Fixes",     detail: "routed to the owning unit, sequential" },
     { title: "Test",      detail: "verify, then a bounded fix loop" },
@@ -387,8 +387,14 @@ const TESTRES = {
 const dispatch = (prompt, { tier, label, phase: ph, schema }) => {
   // The script IS the enforcement: an unknown tier would make MODEL[tier] undefined, the spread
   // omit `model`, and that unit silently run at session level. Fail loudly instead.
-  if (tier && !Object.prototype.hasOwnProperty.call(MODEL, tier)) {
-    throw new Error(`unknown tier "${tier}" for dispatch "${label}" — must be one of ${Object.keys(MODEL).join(", ")}`);
+  // `tier !== null`, not `tier`: an explicit null is the legitimate "session level" case above,
+  // but `undefined` — a unit written with no tier key at all — must NOT slip through. That is
+  // deliberately looser than the preflight's `!u.tier`, which requires a concrete tier because
+  // no unit may run at session level. Do not "simplify" one into the other: making dispatch use
+  // `!tier` breaks the whole-plan review, and making the preflight use `!== null` lets a unit
+  // through with no tier.
+  if (tier !== null && !Object.prototype.hasOwnProperty.call(MODEL, tier)) {
+    throw new Error(`unknown tier "${tier}" for dispatch "${label}" — must be one of ${Object.keys(MODEL).join(", ")} (a missing tier would otherwise run silently at session level)`);
   }
   const model  = tier ? MODEL[tier]  : null;
   const effort = tier ? EFFORT[tier] : null;
@@ -403,6 +409,17 @@ const dispatch = (prompt, { tier, label, phase: ph, schema }) => {
 };
 
 const briefFor = (u) => (u.areas || []).map((a) => `### Area: ${a}\n${AREA[a] || "(no brief)"}`).join("\n\n");
+
+// Preflight: validate every unit's tier before dispatching anything. A guard that throws on
+// unit 5 has already paid for units 1-4. The script IS the enforcement — the plan-time gate
+// that should catch a missing modelTier cannot be relied on.
+for (const u of UNITS) {
+  if (!u.tier || !Object.prototype.hasOwnProperty.call(MODEL, u.tier)) {
+    throw new Error(
+      `unit "${u.id}" has tier ${JSON.stringify(u.tier)} — must be one of ${Object.keys(MODEL).join(", ")}`
+    );
+  }
+}
 
 // ---- Implement: sequential (the notes chain needs it), but each unit's review is
 // started immediately and left running while the next unit implements. That removes
@@ -703,7 +720,9 @@ for the cost report, and it is not recoverable from the returned summary.
    established — treat it as unknown, NOT as green. Report `lastTestSummary` verbatim and do not
    close beads. When `refactorSkipped` is null the refactor ran, so read `greenAfterRefactor` the
    same way: `false` or `null` there means the tree was left red or unverified AFTER refactoring,
-   which is the state most likely to be mistaken for success.
+   which is the state most likely to be mistaken for success. Absent is not null: Simple mode
+   omits `refactorSkipped` entirely and has no refactor phase, so `greenAfterRefactor` means
+   nothing there — judge a Simple run on `greenAfterImpl` alone.
 2. **Close the beads for completed bundles** — `bd close <id>` — from this skill and nowhere else.
    Leave anything unfinished `in_progress` so a resume can pick it up. When unsure whether a bead is
    still in the state you left it in, guard the transition:

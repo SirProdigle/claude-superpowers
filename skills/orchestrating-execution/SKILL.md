@@ -681,6 +681,9 @@ Refactor block does not re-run implementation. Before diagnosing why a completed
 something odd, read `<transcriptDir>/journal.jsonl` — it records each agent's actual return value.
 Use `/workflows` to watch live progress.
 
+**Keep the `transcriptDir`** from the Workflow tool's result alongside the `runId`. Step 8 needs it
+for the cost report, and it is not recoverable from the returned summary.
+
 ## Step 8: On completion
 
 1. **Read the returned summary.** `greenAfterImpl: false` means the test loop exhausted its rounds
@@ -691,12 +694,25 @@ Use `/workflows` to watch live progress.
    still in the state you left it in, guard the transition:
    `bd update <id> --if-status in_progress --status closed` writes nothing and exits **13** on a
    mismatch, so it cannot double-apply.
-3. **Report the epic id** and a short outcome: bundles run, findings count, test state.
-4. **Suggest `/complete-epic <epic-id>`** and stop there. That command already owns evidence
+3. **Run the cost report** and include it in what you report back:
+
+   ```bash
+   node ~/.claude/plugins/marketplaces/claude-superpowers/scripts/wf-cost.mjs <transcriptDir>
+   ```
+
+   Quote the totals line: agents, median turns per agent, and the top-20% cost share. Median turns
+   per agent is the number this pipeline is designed to hold down — a median above ~120 means units
+   are too large and the bundling in Step 3 was too generous. If `transcriptDir` is missing or the
+   script exits non-zero, say "cost report unavailable" and carry on; it is a report, not a gate.
+
+   The script's own `budget.spent()` log lines cover output tokens only, roughly 5% of real cost.
+   Where the two disagree, the report is right.
+4. **Report the epic id** and a short outcome: bundles run, findings count, test state.
+5. **Suggest `/complete-epic <epic-id>`** and stop there. That command already owns evidence
    gathering, follow-up filing, the retrospective and epic closure. Do not write a completion
    report, do not file follow-ups, do not close the epic yourself.
 
-   **Untracked runs skip 2 and 4** — there is no epic to complete. Report the outcome, name the plan
+   **Untracked runs skip 2 and 5** — there is no epic to complete. Report the outcome, name the plan
    document, and stop.
 
 ## Anti-Patterns

@@ -730,11 +730,20 @@ for the cost report, and it is not recoverable from the returned summary.
    which is the state most likely to be mistaken for success. Absent is not null: Simple mode
    omits `refactorSkipped` entirely and has no refactor phase, so `greenAfterRefactor` means
    nothing there — judge a Simple run on `greenAfterImpl` alone.
-2. **Close the beads for completed bundles** — `bd close <id>` — from this skill and nowhere else.
-   Leave anything unfinished `in_progress` so a resume can pick it up. When unsure whether a bead is
-   still in the state you left it in, guard the transition:
+2. **Close out the tracker.** Follow `skills/shared/closing-out-the-tracker.md` — it owns the
+   close, the `.tasks.json` sync and the chaff sweep, and `executing-plans` follows the same
+   procedure so the two paths cannot drift apart.
+
+   In short: close the beads for completed bundles — `bd close <id>` — from this skill and nowhere
+   else. Leave anything unfinished `in_progress` so a resume can pick it up, and name which ones
+   and why. When unsure whether a bead is still in the state you left it in, guard the transition:
    `bd update <id> --if-status in_progress --status closed` writes nothing and exits **13** on a
    mismatch, so it cannot double-apply.
+
+   **This step is not optional and does not wait to be asked.** You are the only party that knows
+   which bundles went green; nobody reconstructs that later without reading git. Skipping it
+   leaves shipped work sitting behind `in_progress` beads, and the staleness stays invisible until
+   someone runs `/complete-epic` and hits its Phase 0 gate.
 3. **Run the cost report** and include it in what you report back:
 
    ```bash
@@ -754,12 +763,22 @@ for the cost report, and it is not recoverable from the returned summary.
    The script's own `budget.spent()` log lines cover output tokens only, roughly 5% of real cost.
    Where the two disagree, the report is right.
 4. **Report the epic id** and a short outcome: bundles run, findings count, test state.
-5. **Suggest `/complete-epic <epic-id>`** and stop there. That command already owns evidence
-   gathering, follow-up filing, the retrospective and epic closure. Do not write a completion
-   report, do not file follow-ups, do not close the epic yourself.
+5. **Continue into `/complete-epic <epic-id>`** — do not stop and suggest it. That command already
+   owns evidence gathering, follow-up filing, the retrospective and epic closure. Do not write a
+   completion report, do not file follow-ups, do not close the epic yourself; run the command and
+   let it do those.
 
-   **Untracked runs skip 2 and 5** — there is no epic to complete. Report the outcome, name the plan
-   document, and stop.
+   Automatic means the user did not have to type it. It does **not** mean the report goes in
+   unread: `/complete-epic` keeps both approval checkpoints, so the user still sees the
+   retrospective before it is written and still approves the follow-up beads before they exist.
+
+   Because step 2 already closed the children, its Phase 0 gate should pass cleanly. If it reports
+   open children anyway, that is a real signal — either something never went green and you left it
+   open deliberately, or the close in step 2 failed. Investigate; do not wave it through.
+
+   **Untracked runs skip 5** — there is no epic to complete. Report the outcome, name the plan
+   document, and stop. They still do step 2: the chaff sweep and any `.tasks.json` sync apply
+   whether or not an epic exists.
 
 ## Anti-Patterns
 
@@ -777,6 +796,8 @@ for the cost report, and it is not recoverable from the returned summary.
 | Relaunching from scratch after a mid-run failure | Edit the persisted script and resume with `resumeFromRunId`. A fresh launch re-dispatches — and re-pays for — every bundle that already succeeded. |
 | Implementing a task yourself "since it's small" | You are the coordinator. Work happens inside the workflow, where routing is resolved and each dispatch is logged. Your edits are neither. |
 | Writing your own completion report at the end | `/complete-epic` owns that, with evidence. Duplicating it produces two accounts of the same run that will disagree. |
+| Ending the run with the beads still `in_progress` | You hold the only record of which bundles went green. Reconstructing it later means git archaeology against acceptance criteria — and until someone runs `/complete-epic`, nothing reveals the tracker is stale. |
+| Stopping to suggest `/complete-epic` instead of running it | The user opted into orchestration to avoid driving each step by hand. The command's own checkpoints are what protect the report's accuracy, not your pause before invoking it. |
 
 ## Red Flags — STOP
 

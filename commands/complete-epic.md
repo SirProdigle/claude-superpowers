@@ -17,10 +17,28 @@ that yielded a number, the number does not go in the report. This is
 `claude-superpowers:verification-before-completion` applied to retrospectives, and it is
 the whole point. A retrospective written from memory is fiction with a table of contents.
 
+**This command is often entered automatically**, straight from the end of an execution run —
+`executing-plans` Step 3 and `orchestrating-execution` Step 8 both continue into it rather than
+stopping to suggest it. That changes nothing about how it runs. The iron rule still holds: the
+run that just finished is not evidence, and "the workflow said it was green" is a claim to
+verify here, not a number to copy forward. Both approval checkpoints stay — arriving here
+without being typed is not consent to write the report unread.
+
 If `$ARGUMENTS` is empty, list candidate epics and ask which one:
 ```bash
 bd list --type=epic --all
 ```
+
+**If that returns "No issues found", do not conclude there are no epics.** Plenty of parents are
+typed `feature` or `task` and are epics in everything but the type field. Fall back to listing
+anything with children and offer those:
+
+```bash
+bd list --all
+```
+
+Any row with children beneath it is a candidate. Say which fallback you used, so the user knows
+the list came from structure rather than the type field.
 
 ## Phase 0: Eligibility Gate
 
@@ -28,7 +46,13 @@ bd list --type=epic --all
 bd show $ARGUMENTS
 ```
 
-Read the `CHILDREN` block. It prints a completion line — `✓ 12/12 complete (100%) — eligible for close`.
+Read the `CHILDREN` block and count the status glyph on each row yourself: `✓` closed,
+`◐` in_progress, `○` open, `●` blocked, `❄` deferred.
+
+Some `bd` versions print a completion summary line (`✓ 12/12 complete (100%) — eligible for
+close`) and some print only the bare child rows. **Do not wait for that line or treat its absence
+as a pass** — count the glyphs. If you find yourself reporting "eligible for close" without having
+counted, you are reading a line that may not be there.
 
 **FAILURE CONDITION — incomplete children.** If any child is not closed, STOP. Report:
 
@@ -144,6 +168,39 @@ isn't actually unblocked.
 and get approval before creating any of them. Batch the approval; do not ask per bead.
 
 Then add their ids back into report section 7 so the report and the tracker agree.
+
+### Where each follow-up goes
+
+Two destinations, and the split matters:
+
+- **Work with a real home** — a follow-up that belongs to a named epic, a known area, or blocks
+  something already tracked — gets filed there, parented normally.
+- **Chaff** — real but unowned. The thing worth doing that has no project to sit in: a fixture
+  that should be better, a rename you noticed, a "we should really..." with no deadline. This
+  goes to the repo's **standing misc epic**, one per repo, created once and reused forever.
+
+```bash
+# Find the standing epic:
+bd list --all --json | jq -r '.[] | select(.title == "Backlog: unsorted follow-ups") | .id'
+
+# If that returns nothing, create it once:
+bd create "Backlog: unsorted follow-ups" --type epic --priority 3 \
+  --description "Standing catch-all for out-of-scope work surfaced by completed runs. Not a
+project — a bucket. Items graduate out of here into real epics when someone picks them up."
+
+# Then file chaff under it, keeping provenance:
+bd create "<title>" --type <task|bug|chore> --priority <P2-P4> \
+  --parent <misc-epic-id> \
+  --description "Surfaced by $ARGUMENTS retrospective. <context>"
+bd link <new-id> $ARGUMENTS --type discovered-from
+```
+
+One bucket per repo, not one per epic — the point is a single place to look. The
+`discovered-from` link is what carries provenance once the item outlives the run that found it.
+
+Ask which items are chaff rather than sorting them yourself; the user knows what they intend to
+come back to. Presenting the split as part of the Phase 3 checkpoint is enough — this is not a
+second approval round.
 
 ## Phase 4: Capture Learnings
 

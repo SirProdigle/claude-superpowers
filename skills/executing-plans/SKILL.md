@@ -78,9 +78,28 @@ For each task:
 5. Mark as completed
 6. **Sync `.tasks.json`:** Read the tasks file, update the task's `"status"` to `"completed"` (or `"in_progress"` in step 1), set `"lastUpdated"` to current ISO timestamp, write back. This keeps the persistence file in sync with native tasks for cross-session resume.
 
-### Step 3: Complete Development
+### Step 3: Close Out the Tracker
 
-After all tasks complete and verified:
+After all tasks complete and verified, and **before** finishing the branch:
+
+- **REQUIRED PROCEDURE:** Follow `skills/shared/closing-out-the-tracker.md`.
+- Close the beads for work you proved green — from here, the coordinator, never from inside a
+  subagent. Leave anything unproven `in_progress` and say which, so a bead left open on purpose
+  is distinguishable from one left open by neglect.
+- Sync `.tasks.json` so the persistence file agrees with what actually shipped.
+- Run the chaff sweep: offer the out-of-scope work this run turned up, and file what the user
+  accepts under the repo's standing misc epic.
+- If the plan is tracked by an epic, continue into `/complete-epic <epic-id>` rather than
+  waiting to be asked. Its approval checkpoints still stand.
+
+**Do not skip this because the code is done.** Execution is the only point where you know which
+tasks passed and why; that knowledge is not recoverable later without git archaeology. A tree
+full of shipped work sitting behind eleven `in_progress` beads is a half-finished job, and the
+staleness is invisible until someone runs the one command that looks.
+
+### Step 4: Complete Development
+
+Then:
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
 - **REQUIRED SUB-SKILL:** Use claude-superpowers:finishing-a-development-branch
 - Follow that skill to verify tests, present options, execute choice
@@ -110,6 +129,7 @@ After all tasks complete and verified:
 - Reference skills when plan says to
 - Stop when blocked, don't guess
 - Never start implementation on main/master branch without explicit user consent
+- Close the tracker before finishing the branch — shipped code behind open beads is a half-done job
 
 ## Integration
 
@@ -117,3 +137,7 @@ After all tasks complete and verified:
 - **claude-superpowers:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
 - **claude-superpowers:writing-plans** - Creates the plan this skill executes
 - **claude-superpowers:finishing-a-development-branch** - Complete development after all tasks
+
+**Required procedures:**
+- **`skills/shared/closing-out-the-tracker.md`** - Close beads, sync `.tasks.json`, sweep chaff,
+  hand off to `/complete-epic` (Step 3)

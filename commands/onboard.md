@@ -50,7 +50,7 @@ AskUserQuestion:
   multiSelect: false
   options:
     - label: "Guided tiers (recommended)"
-      description: "mechanical→haiku, standard→sonnet, frontier→session model. Cheap models for routine implementation, mid-tier for integration and reviews, full power only where judgment lives."
+      description: "mechanical→sonnet, standard→opus, frontier→fable. Mid-tier for routine implementation, frontier for integration and reviews, highest capability where judgment lives."
     - label: "One fixed model"
       description: "Every subagent uses one model you pick next — flat cost cap, no per-task gradation."
     - label: "No"
@@ -60,7 +60,7 @@ AskUserQuestion:
 - **Guided tiers** → write `model-routing.json` to the scope's config target with this content:
 
   ```json
-  {"mechanical": "haiku", "standard": "sonnet", "frontier": "inherit"}
+  {"mechanical": "sonnet", "standard": "opus", "frontier": "fable"}
   ```
 
 - **One fixed model** → ask the model follow-up below first (do NOT write before both answers), then write the same structure with all three tiers set to the chosen value.

@@ -250,18 +250,29 @@ Your ONLY permitted next action is calling `AskUserQuestion` with this EXACT str
 
 ```yaml
 AskUserQuestion:
-  question: "Plan complete and saved to docs/superpowers/plans/<filename>.md. How would you like to execute it?"
-  header: "Execution"
-  options:
-    - label: "Subagent-Driven (this session)"
-      description: "I dispatch fresh subagent per task, review between tasks, fast iteration"
-    - label: "Parallel Session (separate)"
-      description: "Open new session in worktree with executing-plans, batch execution with checkpoints; it can message this session to consult"
-    - label: "Orchestrated — Simple"
-      description: "Bundled sequential implementation, one review-and-fix pass, then tests. Tracked in Beads."
-    - label: "Orchestrated — Full"
-      description: "Bundled implementation, layered review, routed fixes, tests, refactor, tests. Tracked in Beads."
+  questions:
+    - question: "Plan complete and saved to docs/superpowers/plans/<filename>.md. How would you like to execute it?"
+      header: "Execution"
+      options:
+        - label: "Subagent-Driven (this session)"
+          description: "I dispatch fresh subagent per task, review between tasks, fast iteration"
+        - label: "Parallel Session (separate)"
+          description: "Open new session in worktree with executing-plans, batch execution with checkpoints; it can message this session to consult"
+        - label: "Orchestrated — Simple"
+          description: "Bundled sequential implementation, one review-and-fix pass, then tests"
+        - label: "Orchestrated — Full"
+          description: "Bundled implementation, layered review, routed fixes, tests, refactor, tests"
+    - question: "Track this plan in Beads (epic + one bead per task)?"
+      header: "Beads"
+      options:
+        - label: "Yes — use Beads"
+          description: "Creates an epic and child beads in .beads/ (runs bd init if needed); enables /complete-epic at the end"
+        - label: "No — untracked"
+          description: "No bd calls at all; progress lives only in .tasks.json and git"
 ```
+
+Both questions go in the **same** `AskUserQuestion` call — do not ask them one at a time, and do
+not touch `bd` (no `bd init`, no `bd create`) before the user has answered the second question.
 
 **If you are about to call ExitPlanMode, STOP — call AskUserQuestion instead.**
 
@@ -280,9 +291,14 @@ Guide the user to open a new session in the worktree, then invoke: `claude-super
 
 **If either Orchestrated option chosen:**
 Invoke the Skill tool: `claude-superpowers:orchestrating-execution`
-- Pass the chosen mode (Simple or Full) to the skill
-- The skill handles bundling, Beads, and launching the workflow
+- Pass the chosen mode (Simple or Full) **and** the Beads answer (tracked or untracked) to the skill
+- The skill handles bundling, Beads (only if the user said yes), and launching the workflow
 - Do NOT implement tasks yourself
+
+**Beads answer, for every execution method:** "No — untracked" means no `bd` commands anywhere in
+this run — not at handoff, not inside the chosen skill, not at close-out. "Yes — use Beads" is only
+acted on by `orchestrating-execution` (it owns the port into Beads); the other two methods track via
+`.tasks.json` regardless and close out any epic only if one already exists.
 </HARD-GATE>
 
 ---

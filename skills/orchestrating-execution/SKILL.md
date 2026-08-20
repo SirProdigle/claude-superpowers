@@ -55,6 +55,8 @@ shell work is a good fit. A plan that orchestrates *other agents* is not.
 digraph process {
     rankdir=TB;
     "Resolve mode (simple | full)" [shape=box];
+    "Beads chosen at handoff?" [shape=diamond];
+    "Untracked mode (6e): EPIC = untracked-<slug>, no bd" [shape=box];
     "bd on PATH?" [shape=diamond];
     "STOP — bd not installed, hand back to your human partner" [shape=box style=filled fillcolor=lightpink];
     ".beads/ present?" [shape=diamond];
@@ -71,7 +73,10 @@ digraph process {
     "Close completed beads, report epic id" [shape=box];
     "Suggest /complete-epic <epic-id>" [shape=box style=filled fillcolor=lightgreen];
 
-    "Resolve mode (simple | full)" -> "bd on PATH?";
+    "Resolve mode (simple | full)" -> "Beads chosen at handoff?";
+    "Beads chosen at handoff?" -> "bd on PATH?" [label="yes"];
+    "Beads chosen at handoff?" -> "Untracked mode (6e): EPIC = untracked-<slug>, no bd" [label="no"];
+    "Untracked mode (6e): EPIC = untracked-<slug>, no bd" -> "Bundle the tasks (judgment, rules below)";
     "bd on PATH?" -> "STOP — bd not installed, hand back to your human partner" [label="no"];
     "bd on PATH?" -> ".beads/ present?" [label="yes"];
     ".beads/ present?" -> "Bundle the tasks (judgment, rules below)" [label="yes"];
@@ -114,6 +119,14 @@ branch intact when it gives up. If you are on `main`/`master`, use
 here. Do not silently orchestrate a dozen agent commits onto a shared branch.
 
 ## Step 2: Beads check
+
+**First, honour the handoff answer.** The `writing-plans` handoff asked "Track this plan in Beads?"
+as its second question. If the answer was **No — untracked**, skip this step entirely: do not run
+`command -v bd`, do not run `bd init`, and follow the Untracked mode rules in 6e for the rest of the
+run. If the answer was not passed to you, ask it now with a single `AskUserQuestion` (Yes — use
+Beads / No — untracked) before running anything below. Never touch `bd` before the user has said yes.
+
+If the answer was **Yes — use Beads**:
 
 ```bash
 command -v bd && test -d .beads && echo BEADS_OK
@@ -687,7 +700,7 @@ the downside of skipping is a design nobody looks at again.
 
 ### 6e. Untracked mode
 
-If your human partner insisted on running without Beads, the mechanics are now trivial: there is no
+If your human partner chose "No — untracked" at the handoff (or in Step 2), the mechanics are trivial: there is no
 `bd` in the script unless you put it there. Drop Step 5 and Step 8's bead half, set
 `EPIC = "untracked-<plan slug>"`, and replace `bd show <id>` in the implementer prompt with the
 task's Goal/Files/Steps **inlined verbatim into the prompt string**. Do not send agents hunting for

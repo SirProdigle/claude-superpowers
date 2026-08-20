@@ -9,7 +9,7 @@
     {
       "name": "claude-superpowers",
       "description": "Claude Code Superpowers — brainstorm, plan, TDD, gates and subagent-driven development. Fork of pcvelz/superpowers.",
-      "version": "6.5.0-dev",
+      "version": "6.5.1-dev",
       "source": "./",
       "author": {
         "name": "pcvelz",
@@ -17,5 +17,5 @@
       }
     }
   ],
-  "version": "6.5.0-dev"
+  "version": "6.5.1-dev"
 }
